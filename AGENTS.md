@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** Milestones 1–2 are done: `:sdk` has the contracts, Android adapter, storage, resource monitor, Model Manager, router, and request controller; `:sdk-llama` runs GGUF models on device through llama.cpp. `:app` still shows simulated replies until milestone 3 (T2AI-050) connects it to the SDK.
+**Current state:** Milestones 1–3 are done. Tune2AI Studio is live: it chats with a GGUF model on the device through the public SDK (`Tune2AI` → `ChatApi` → controller → router → Model Manager → llama.cpp). Agent/Workflow modes, the remote backend, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
 
 ## Where things are
 

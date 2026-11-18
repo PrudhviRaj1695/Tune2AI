@@ -4,12 +4,20 @@ const svgIcon = (id) => `<svg class="icon" aria-hidden="true"><use href="#${id}"
 const wide = matchMedia("(min-width: 1200px)");
 const finePointer = matchMedia("(pointer: fine)");
 
-const MODELS = {
+let MODELS = {
   llama: { name: "Llama 3.2 3B Instruct", short: "Llama 3.2 3B", backend: "llama.cpp", mono: "GG", size: "2.4 GB", memory: "2.4 / 6 GB", memoryPct: 40, tps: 64, state: "Loaded" },
   onnx: { name: "Phi-3 Mini", short: "Phi-3 Mini", backend: "ONNX Runtime", mono: "OX", size: "1.8 GB", memory: "1.8 / 6 GB", memoryPct: 30, tps: 52, state: "Ready" },
   coreml: { name: "Core ML small model", short: "Core ML", backend: "Core ML", mono: "ML", size: "1.1 GB", unavailable: "Needs the iOS adapter" },
 };
 const REMOTE_TPS = 88;
+
+/* Live mode: inside the Android app the SDK bridge is present. In a browser preview there is no
+   bridge, and replies come from simulate() with the same event shapes. */
+const bridge = window.Tune2AIBridge || null;
+const live = Boolean(bridge);
+const NO_MODEL = { name: "No model yet", short: "No model", backend: "llama.cpp", mono: "—", size: "", memory: "—", memoryPct: 0, tps: 0 };
+const currentModel = () => MODELS[state.model] || NO_MODEL;
+const formatBytes = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
 
 const MODES = {
   Chat: {
@@ -37,7 +45,7 @@ const MODES = {
   },
 };
 
-const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null };
+const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null };
 const els = {
   conversation: $("#conversation"),
   empty: $("#empty-state"),
@@ -103,25 +111,62 @@ wide.addEventListener("change", () => closeSheet());
 
 /* ---------- Setup ---------- */
 function renderModels() {
-  $("#model-list").innerHTML = Object.entries(MODELS).map(([key, m]) => `
+  const empty = live && Object.keys(MODELS).length === 0
+    ? `<p class="hint">No models yet. Import a GGUF file, for example SmolLM2 or Qwen2.5 Instruct.</p>` : "";
+  const importButton = live ? `<button class="import-model" type="button" data-import>${svgIcon("i-plus")}Import a .gguf model</button>` : "";
+  $("#model-list").innerHTML = empty + Object.entries(MODELS).map(([key, m]) => `
     <label class="model-option">
       <input type="radio" name="model" value="${key}" ${key === state.model ? "checked" : ""} ${m.unavailable ? "disabled" : ""} />
       <span class="mono-tile" aria-hidden="true">${m.mono}</span>
       <span class="model-text"><strong>${m.name}</strong><small>${m.backend} · ${m.size}${m.unavailable ? ` · ${m.unavailable}` : ""}</small></span>
       <span class="model-state" data-state="${(m.state || "").toLowerCase()}">${m.unavailable ? "Unavailable" : m.state}</span>
-    </label>`).join("");
+    </label>`).join("") + importButton;
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-import]")) bridge?.importModel();
+});
+
+function loadLiveModels() {
+  const list = JSON.parse(bridge.listModels());
+  MODELS = Object.fromEntries(list.map((m) => [m.id, {
+    name: m.name,
+    short: m.name.length > 18 ? `${m.name.slice(0, 17)}…` : m.name,
+    backend: "llama.cpp",
+    mono: "GG",
+    size: formatBytes(m.sizeBytes),
+    state: m.state === "Unloaded" ? "Ready" : m.state,
+    unavailable: m.state === "Unavailable" || m.state === "Failed" ? m.reason : null,
+    tps: 0,
+  }]));
+  const usable = Object.keys(MODELS).filter((k) => !MODELS[k].unavailable);
+  if (!usable.includes(state.model)) state.model = usable[0] || null;
+  renderModels();
+  renderRuntime();
+  renderMode();
+  if (!state.hasRun) renderTimeline(routeSteps()); // never overwrite a finished run's trace
 }
 
 function contextItems() {
   return [
     { label: "Prompt v3", detail: "Helpful assistant v3" },
-    state.memory && { label: "Memory", detail: "Session memory · 2 items" },
-    state.rag && { label: "RAG", detail: "RAG sources · 3 chunks" },
+    live && { label: "History", detail: "Conversation history (trimmed to fit)" },
+    !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
+    !live && state.rag && { label: "RAG", detail: "RAG sources · 3 chunks" },
   ].filter(Boolean);
 }
 
+/* Trace labels for the SDK's context sources, e.g. "prompt:helpful-assistant@3". */
+function describeSource(source) {
+  const omitted = source.startsWith("omitted ");
+  const [kind, value = ""] = source.replace(/^omitted /, "").split(/:(.*)/s);
+  if (omitted) return `Trimmed · ${value}`;
+  if (kind === "prompt") return `Prompt ${value.replace("@", " v")}`;
+  return `${kind[0].toUpperCase()}${kind.slice(1)} · ${value}`;
+}
+
 function renderRuntime() {
-  const model = MODELS[state.model];
+  const model = currentModel();
   const remote = state.execution === "remote";
   const chip = $("#model-chip");
   $("#model-chip-label").textContent = model.short;
@@ -132,11 +177,20 @@ function renderRuntime() {
   $("#execution-hint").textContent = remote
     ? "Sent to the Remote API backend over HTTPS. Same route, same events."
     : "Runs on this phone. Nothing leaves the device.";
-  $("#memory-value").textContent = remote ? "0.3 / 6 GB" : model.memory;
-  $("#memory-meter").style.width = `${remote ? 5 : model.memoryPct}%`;
+  if (live) {
+    const r = JSON.parse(bridge.resources());
+    const used = r.totalBytes - r.availableBytes;
+    $("#memory-value").textContent = `${(used / 1e9).toFixed(1)} / ${(r.totalBytes / 1e9).toFixed(1)} GB`;
+    $("#memory-meter").style.width = `${Math.round((used / r.totalBytes) * 100)}%`;
+  } else {
+    $("#memory-value").textContent = remote ? "0.3 / 6 GB" : model.memory;
+    $("#memory-meter").style.width = `${remote ? 5 : model.memoryPct}%`;
+  }
 
   const items = contextItems();
-  $("#included-list").innerHTML = items.map((i) => `<li>${svgIcon("i-check")}${i.detail}</li>`).join("");
+  $("#included-list").innerHTML = state.sources
+    ? state.sources.map((s) => `<li>${svgIcon("i-check")}${describeSource(s)}</li>`).join("")
+    : items.map((i) => `<li>${svgIcon("i-check")}${i.detail}</li>`).join("");
   $("#context-pills").innerHTML = items.map((i) => `<button class="chip" type="button" data-open="setup">${i.label}</button>`).join("");
 }
 
@@ -167,11 +221,15 @@ bindRange($("#max-tokens"), $("#token-value"), (n) => n.toLocaleString("en-US"))
 function renderMode() {
   const mode = MODES[state.mode];
   $$('[role="tab"]').forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.mode === state.mode)));
-  $("#empty-title").textContent = mode.title;
-  $("#empty-copy").textContent = mode.copy;
+  const needsModel = live && state.mode === "Chat" && Object.keys(MODELS).length === 0;
+  $("#empty-title").textContent = needsModel ? "Add a model to start." : mode.title;
+  $("#empty-copy").textContent = needsModel
+    ? "Import a GGUF model from this phone. It runs fully on-device; nothing is sent anywhere."
+    : live && state.mode !== "Chat" ? `${mode.copy} ${state.mode} runs are simulated until the ${state.mode} API ships.` : mode.copy;
   els.prompt.placeholder = mode.placeholder;
-  $("#suggestions").innerHTML = mode.suggestions
-    .map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
+  $("#suggestions").innerHTML = needsModel
+    ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
+    : mode.suggestions.map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
 }
 $$('[role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
   state.mode = tab.dataset.mode;
@@ -179,7 +237,7 @@ $$('[role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
 }));
 $("#suggestions").addEventListener("click", (event) => {
   const suggestion = event.target.closest(".suggestion");
-  if (!suggestion) return;
+  if (!suggestion || suggestion.hasAttribute("data-import")) return;
   els.prompt.value = suggestion.textContent.trim();
   updateSend();
   els.prompt.focus();
@@ -189,12 +247,12 @@ $("#suggestions").addEventListener("click", (event) => {
 const ROUTE_LABELS = ["API", "Controller", "Router", "Context", "Inference"];
 
 function routeSteps() {
-  const model = MODELS[state.model];
+  const model = currentModel();
   const remote = state.execution === "remote";
   const context = contextItems().map((i) => i.label).join(" + ");
   return [
     { name: `${state.mode} API`, detail: "Request received" },
-    { name: "Request Controller", detail: "Validated · deadline 30 s" },
+    { name: "Request Controller", detail: `Validated · deadline ${live ? 120 : 30} s` },
     { name: "Model & Task Router", detail: remote ? `Remote API · ${model.short}` : `${model.backend} · ${model.short}` },
     { name: "Context Manager", detail: context },
     { name: "Inference", detail: remote ? "Remote API · SSE stream" : `${model.backend} · streaming` },
@@ -247,6 +305,59 @@ function simulate(request, emit) {
   return () => timers.forEach(clearTimeout);
 }
 
+/* Live event source: the SDK through the native bridge, mapped to the UI's event shapes. */
+const STAGES = ["RECEIVED", "VALIDATED", "ROUTED", "CONTEXT_ASSEMBLED", "GENERATING"];
+const liveListeners = new Map();
+let liveSeq = 0;
+
+function liveSource(prompt, emit) {
+  const id = `ui_${++liveSeq}`;
+  const start = performance.now();
+  let last = start;
+  let first = null;
+  liveListeners.set(id, (e) => {
+    if (e.type === "progress") {
+      const now = performance.now();
+      emit({ type: "step", index: STAGES.indexOf(e.stage), ms: Math.round(now - last), detail: e.detail, sources: e.sources });
+      last = now;
+      return;
+    }
+    if (e.type === "delta") {
+      if (first === null) {
+        first = Math.round(performance.now() - start);
+        emit({ type: "first-token", ms: first });
+      }
+      emit({ type: "delta", text: e.text });
+      return;
+    }
+    liveListeners.delete(id);
+    if (e.type === "completed") {
+      const firstMs = e.firstTokenMillis ?? first ?? 0;
+      const tps = Math.round((e.tokens * 1000) / Math.max(1, e.totalMillis - firstMs));
+      emit({ type: "completed", tokens: e.tokens, tps, totalMs: e.totalMillis, firstMs });
+    } else {
+      emit(e); // failed or cancelled
+    }
+  });
+  bridge.send(JSON.stringify({
+    id,
+    prompt,
+    model: state.model || null,
+    temperature: Number($("#temperature").value),
+    maxTokens: Number($("#max-tokens").value),
+  }));
+  return () => {
+    liveListeners.delete(id);
+    bridge.cancel(id);
+  };
+}
+
+window.tune2ai = {
+  onEvent: (e) => liveListeners.get(e.id)?.(e),
+  onModelsChanged: () => loadLiveModels(),
+  onNotice: (text) => toast(text),
+};
+
 /* ---------- Conversation ---------- */
 function stickToBottom(fn) {
   const c = els.conversation;
@@ -265,14 +376,14 @@ function addUserMessage(text) {
   els.conversation.append(msg);
 }
 
-function addAssistantMessage() {
-  const model = MODELS[state.model];
+function addAssistantMessage(simulated) {
+  const model = currentModel();
   const msg = document.createElement("article");
   msg.className = "msg";
   msg.innerHTML = `
     <div class="msg-head">
       <svg class="avatar" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="url(#brand-gradient)" /><path d="M6 17c2 0 2-6 4-6s2 10 4 10 2-13 4-13 2 9 4 9 2-4 4-4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      <strong>Tune2AI</strong><span>${state.execution === "remote" ? "Remote" : "On-device"} · ${model.short}</span>
+      <strong>Tune2AI</strong><span>${state.execution === "remote" ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
     </div>
     <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l, i) => `${i ? '<span class="route-link"></span>' : ""}<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
     <div class="answer is-streaming"><p></p></div>
@@ -281,14 +392,24 @@ function addAssistantMessage() {
   return msg;
 }
 
+/* Appends streamed text, starting a new paragraph at each blank line. */
+function appendText(answer, text) {
+  text.split(/\n{2,}/).forEach((part, i) => {
+    if (i > 0) answer.append(document.createElement("p"));
+    answer.lastElementChild.append(part);
+  });
+}
+
 function run(text) {
+  const simulated = !live || state.mode !== "Chat";
+  state.hasRun = true;
   els.empty.hidden = true;
   addUserMessage(text);
-  const msg = addAssistantMessage();
+  const msg = addAssistantMessage(simulated);
   const routeEls = $$(".route-step", msg);
   const answer = $(".answer", msg);
   const steps = routeSteps();
-  const model = MODELS[state.model];
+  const model = currentModel();
   const remote = state.execution === "remote";
   const requestId = `req_${crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, "0")}`;
   let firstMs = null;
@@ -308,14 +429,21 @@ function run(text) {
       routeEls.forEach((el, i) => { el.dataset.state = i < event.index ? "done" : i === event.index ? "active" : "idle"; });
       items.forEach((li, i) => { li.dataset.state = i < event.index ? "done" : i === event.index ? "active" : "idle"; });
       if (event.index > 0) $(".step-time", items[event.index - 1]).textContent = `${event.ms} ms`;
+      if (event.detail) $(".step-text small", items[event.index]).textContent = event.detail;
+      if (event.sources?.length) {
+        state.sources = event.sources;
+        $("#included-list").innerHTML = event.sources.map((s) => `<li>${svgIcon("i-check")}${describeSource(s)}</li>`).join("");
+      }
     } else if (event.type === "first-token") {
       firstMs = event.ms;
       $("#m-first").textContent = `${(event.ms / 1000).toFixed(2)} s`;
     } else if (event.type === "delta") {
-      if (/\n\n/.test(event.text)) answer.append(document.createElement("p"));
-      else answer.lastElementChild.append(event.text);
+      appendText(answer, event.text);
     } else if (event.type === "completed") {
+      if (event.firstMs != null) firstMs = event.firstMs;
       finish("ok", event);
+    } else if (event.type === "failed" || event.type === "cancelled") {
+      finish(event.type, event);
     }
   });
 
@@ -328,16 +456,25 @@ function run(text) {
       items.forEach((li) => { li.dataset.state = "done"; });
       $(".step-time", items[4]).textContent = `${stats.totalMs} ms`;
       setStatus("ok", "Completed");
-      setMetrics(`${(firstMs / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
-      foot.innerHTML = `<button class="chip chip-stats" type="button" data-open="trace">${svgIcon("i-activity")}${(firstMs / 1000).toFixed(2)} s · ${stats.tps} tok/s · ${remote ? "Remote API" : model.backend}</button>`;
+      setMetrics(`${((firstMs ?? 0) / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
+      foot.innerHTML = `<button class="chip chip-stats" type="button" data-open="trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s · ${remote ? "Remote API" : model.backend}</button>`;
     } else {
       routeEls.forEach((el) => { if (el.dataset.state !== "done") el.dataset.state = "idle"; });
       items.forEach((li) => { if (li.dataset.state === "active") li.dataset.state = "cancelled"; });
-      setStatus("cancelled", "Cancelled");
+      const failed = result === "failed";
+      setStatus(failed ? "failed" : "cancelled", failed ? "Failed" : "Cancelled");
       if (firstMs === null) setMetrics();
       else { $("#m-tps").textContent = "—"; $("#m-tokens").textContent = "—"; $("#m-total").textContent = "—"; }
       if (!answer.textContent.trim()) answer.remove();
-      foot.innerHTML = `<span class="chip" data-state="cancelled">Cancelled</span>`;
+      if (failed) {
+        const error = document.createElement("p");
+        error.className = "error-text";
+        error.textContent = stats.message;
+        foot.before(error);
+        foot.innerHTML = `<span class="chip" data-state="failed">Failed · ${stats.category.toLowerCase().replace(/_/g, " ")}</span>`;
+      } else {
+        foot.innerHTML = `<span class="chip" data-state="cancelled">Cancelled</span>`;
+      }
     }
     foot.insertAdjacentHTML("beforeend", contextItems().map((i) => `<span class="chip">${i.label}</span>`).join(""));
     if (!wide.matches && openSheetId !== "trace") $("#trace-dot").hidden = false;
@@ -345,9 +482,12 @@ function run(text) {
     els.send.setAttribute("aria-label", "Run request");
     els.send.innerHTML = svgIcon("i-arrow-up");
     updateSend();
+    if (live) loadLiveModels(); // load state changed
   }
 
-  const stop = simulate({ text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps }, onEvent);
+  const stop = simulated
+    ? simulate({ text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps || 40 }, onEvent)
+    : liveSource(text, onEvent);
   state.run = { cancel: () => { stop(); finish("cancelled"); } };
 }
 
@@ -374,9 +514,13 @@ $("#composer").addEventListener("submit", (event) => {
 
 $("#new-session").addEventListener("click", () => {
   state.run?.cancel();
+  bridge?.newSession();
   $$(".msg", els.conversation).forEach((m) => m.remove());
   els.empty.hidden = false;
   $("#request-id").textContent = "No runs yet";
+  state.hasRun = false;
+  state.sources = null;
+  renderRuntime();
   renderTimeline(routeSteps());
   setStatus("idle", "Idle");
   setMetrics();
@@ -387,6 +531,24 @@ $("#new-session").addEventListener("click", () => {
 });
 
 /* ---------- Start ---------- */
+if (live) {
+  // Not in the SDK yet: remote backend (T2AI-015), memory (T2AI-025), RAG (T2AI-024).
+  $(".sim-badge").hidden = true;
+  const remoteInput = $('input[value="remote"]');
+  remoteInput.disabled = true;
+  remoteInput.closest("label").title = "The Remote API backend arrives with T2AI-015";
+  state.memory = false;
+  state.rag = false;
+  [["#memory-switch", "Arrives with the memory engine (T2AI-025)"], ["#rag-switch", "Arrives with the RAG engine (T2AI-024)"]].forEach(([id, note]) => {
+    const input = $(id);
+    input.checked = false;
+    input.disabled = true;
+    $("small", input.closest(".switch-row")).textContent = note;
+  });
+  MODELS = {};
+  state.model = null;
+  loadLiveModels();
+}
 renderModels();
 renderRuntime();
 renderMode();

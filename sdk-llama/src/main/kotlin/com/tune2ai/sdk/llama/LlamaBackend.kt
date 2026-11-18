@@ -104,8 +104,13 @@ class LlamaBackend(
         fun estimateMemoryBytes(file: File, contextLength: Int): Long =
             file.length() + file.length() / 10 + contextLength * 64L * 1024
 
-        // ponytail: fixed thread count; big.LITTLE-aware selection if real devices show contention.
-        private fun defaultThreads() = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
+        /**
+         * Half the cores, at most 4. ggml's worker threads spin-wait on each other, so using every
+         * core lets UI rendering stall the whole pool: on a 4-core device with Studio's WebView,
+         * 4 threads ran at 0.6 tok/s.
+         * ponytail: core-count heuristic; pin to big cores if real devices show contention.
+         */
+        private fun defaultThreads() = (Runtime.getRuntime().availableProcessors() / 2).coerceIn(1, 4)
 
         private fun isGguf(file: File): Boolean = file.inputStream().use { input ->
             val magic = ByteArray(4)

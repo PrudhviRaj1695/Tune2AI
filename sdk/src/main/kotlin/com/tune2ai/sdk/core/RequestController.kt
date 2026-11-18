@@ -20,15 +20,23 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withTimeout
 
-/** The messages sent to the model, plus a one-line summary for the trace. */
-data class AssembledContext(val messages: List<ChatMessage>, val summary: String)
+/**
+ * The messages sent to the model, a one-line summary for the trace, and the sources that were
+ * [included] or [omitted] to fit the context.
+ */
+data class AssembledContext(
+    val messages: List<ChatMessage>,
+    val summary: String,
+    val included: List<String> = emptyList(),
+    val omitted: List<String> = emptyList(),
+)
 
-/** Hook for the Context Manager (T2AI-022). The default passes messages through unchanged. */
+/** Builds the model input. Implemented by the Context Manager (T2AI-022). */
 fun interface ContextAssembler {
-    suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor): AssembledContext
+    suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions): AssembledContext
 
     companion object {
-        val PassThrough = ContextAssembler { messages, _ -> AssembledContext(messages, "No context sources") }
+        val PassThrough = ContextAssembler { messages, _, _ -> AssembledContext(messages, "Message only") }
     }
 }
 
@@ -62,8 +70,8 @@ class RequestController(
             }
             emit(Progress(requestId, Stage.ROUTED, "${route.backend.id} · ${route.model.name}"))
 
-            val assembled = context.assemble(messages, route.model)
-            emit(Progress(requestId, Stage.CONTEXT_ASSEMBLED, assembled.summary))
+            val assembled = context.assemble(messages, route.model, options)
+            emit(Progress(requestId, Stage.CONTEXT_ASSEMBLED, assembled.summary, assembled.included + assembled.omitted.map { "omitted $it" }))
 
             models.acquire(route.model, route.backend).use { lease ->
                 emit(Progress(requestId, Stage.GENERATING, route.backend.id))

@@ -4,7 +4,7 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 ### T2AI-040 — Provide the unified AI API
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-SDK-1 · **Depends on:** T2AI-002, T2AI-020, T2AI-030
 
 **Story:** As an application developer, I want one SDK entry point so that initialization and shared configuration are consistent.
@@ -17,13 +17,13 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 **Tasks**
 
-- [ ] T2AI-040.1 `api/Tune2AI.kt` and `Tune2AI.Builder` wiring platform, storage, registry, Model Manager, controller.
-- [ ] T2AI-040.2 Public API surface review: mark internals `internal`; add the Kotlin binary-compatibility-validator plugin to track the public API (NFR-11).
-- [ ] T2AI-040.3 Tests: build with fakes; build without any backend fails clearly; `close()` unloads.
+- [x] T2AI-040.1 `Tune2AI.kt` (package `com.tune2ai.sdk`, because the Builder takes an Android `Context`) and `Tune2AI.Builder` wiring platform, storage, registry, Model Manager, controller.
+- [x] T2AI-040.2 Moved to T2AI-053: public API surface review and API dump belong with the first versioned release.
+- [x] T2AI-040.3 Tests: build with fakes; build without any backend fails clearly; `close()` unloads.
 
 ### T2AI-041 — Publish the Chat API
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-SDK-3, FR-SDK-4 · **Depends on:** T2AI-032, T2AI-040
 
 **Story:** As an application developer, I want a Chat API for one-shot and session conversations so that I build chat without calling internals.
@@ -35,9 +35,9 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 **Tasks**
 
-- [ ] T2AI-041.1 `api/ChatApi.kt`, `ChatSession.kt` (history in namespace `chat/<sessionId>`).
-- [ ] T2AI-041.2 Java-friendly callback adapter for apps not using coroutines (the Studio app is Java).
-- [ ] T2AI-041.3 Tests: one-shot, session history across instances, cancellation.
+- [x] T2AI-041.1 `api/ChatApi.kt`: `ChatApi` and `ChatSession` (history in namespace `chat/<sessionId>`; only completed exchanges are stored).
+- [x] T2AI-041.2 Java-friendly callback adapter: `stream(message, options, EventListener)` returning `Cancellable`; always delivers exactly one terminal event, including `Cancelled`.
+- [x] T2AI-041.3 Tests: one-shot, session history across instances, cancellation.
 
 ### T2AI-042 — Publish the Agent API
 
@@ -77,6 +77,8 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 - **Status:** Todo
 - **Milestone:** 4 · **Requirements:** FR-SDK-7 · **Depends on:** T2AI-020, T2AI-040
+
+**Progress:** a minimal `ModelsApi` (register, list, states, remove) shipped with T2AI-050 for Studio's model import.
 
 **Story:** As an application developer, I want a Model API to discover and manage models so that I prepare models before sending requests.
 

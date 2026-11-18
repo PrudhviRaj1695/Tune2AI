@@ -38,8 +38,10 @@ sealed interface ModelState {
     data class Unavailable(val reason: String) : ModelState
 }
 
+@Serializable
 enum class Role { SYSTEM, USER, ASSISTANT }
 
+@Serializable
 data class ChatMessage(val role: Role, val content: String) {
     companion object {
         @JvmStatic fun system(content: String) = ChatMessage(Role.SYSTEM, content)

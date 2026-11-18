@@ -26,7 +26,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 ### T2AI-021 — Manage prompt templates
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-SVC-2 · **Depends on:** T2AI-001
 
 **Story:** As an application developer, I want reusable prompt templates so that requests apply consistent instructions and formatting.
@@ -39,13 +39,13 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-021.1 `services/prompt/PromptTemplate.kt` with `{{variable}}` substitution (no template engine dependency).
-- [ ] T2AI-021.2 `services/prompt/PromptManager.kt`: register, get by id + version, render.
-- [ ] T2AI-021.3 Tests: render, missing variable, undeclared variable, escaping of literal braces.
+- [x] T2AI-021.1 `services/prompt/PromptTemplate.kt` with `{{variable}}` substitution (no template engine dependency).
+- [x] T2AI-021.2 `services/prompt/PromptManager.kt`: register, get by id + version, render.
+- [x] T2AI-021.3 Tests: render, missing variable, undeclared variable, escaping of literal braces; plus a device test, because Android's ICU regex engine rejected a pattern the JVM accepted (it crashed Studio on launch).
 
 ### T2AI-022 — Assemble request context
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-SVC-3 · **Depends on:** T2AI-020, T2AI-021
 
 **Story:** As an application developer, I want a Context Manager to combine input, templates, conversation, memory, and retrieved content so that the model receives bounded, relevant context.
@@ -59,10 +59,10 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-022.1 `services/context/ContextSource.kt` interface; memory and RAG plug in later (T2AI-024, T2AI-025).
-- [ ] T2AI-022.2 `services/context/TokenCounter.kt`: use the backend's tokenizer when it has one, else a chars/4 estimate with a `ponytail:` note.
-- [ ] T2AI-022.3 `services/context/ContextManager.kt`: assemble, trim oldest conversation turns first, produce `ContextReport`.
-- [ ] T2AI-022.4 Tests: ordering, trimming at the limit, omitted-content report, empty sources.
+- [x] T2AI-022.1 `services/context/ContextSource.kt` interface; memory and RAG plug in later (T2AI-024, T2AI-025).
+- [x] T2AI-022.2 `services/context/TokenCounter.kt`: chars/4 estimate with a `ponytail:` note (`estimateTokens` in `ContextManager.kt`); switch to the backend tokenizer if trimming misjudges.
+- [x] T2AI-022.3 `services/context/ContextManager.kt`: assemble, trim oldest conversation turns first, report `included`/`omitted` sources (sent as `Progress.sources`).
+- [x] T2AI-022.4 Tests: ordering, trimming at the limit, omitted-content report, empty sources.
 
 ### T2AI-023 — Provide embedding and reranking services
 

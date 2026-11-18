@@ -171,6 +171,7 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
     const int32_t n_batch = (int32_t) llama_n_batch(s->ctx);
     const char * error = nullptr;
 
+    const int64_t t_start = ggml_time_us();
     // Prompt, in chunks of n_batch; logits only for the very last prompt token.
     for (int32_t i = 0; i < n_prompt && !error; i += n_batch) {
         const int32_t n = std::min(n_batch, n_prompt - i);
@@ -182,9 +183,13 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
 
     std::string pending;
     llama_pos pos = n_prompt;
-    for (int32_t produced = 0; !error && !s->cancel.load() && produced < budget; ++produced) {
+    int64_t t_first = 0;
+    int32_t produced = 0;
+    const char * stop = "budget";
+    for (; !error && !s->cancel.load() && produced < budget; ++produced) {
         const llama_token tok = llama_sampler_sample(smpl, s->ctx, -1);
-        if (llama_vocab_is_eog(vocab, tok)) break;
+        if (produced == 0) t_first = ggml_time_us();
+        if (llama_vocab_is_eog(vocab, tok)) { stop = "end-of-turn"; break; }
 
         char buf[256];
         const int32_t n = llama_token_to_piece(vocab, tok, buf, sizeof(buf), 0, false);
@@ -206,6 +211,12 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
         if (rc != 0) error = "llama.cpp failed while generating";
     }
 
+    if (s->cancel.load()) stop = "cancelled";
+    if (error) stop = "error";
+    const int64_t t_end = ggml_time_us();
+    __android_log_print(ANDROID_LOG_INFO, TAG, "prompt %d tokens (%.0f ms), generated %d tokens (%.1f tok/s), stop=%s",
+                        n_prompt, (t_first ? t_first - t_start : 0) / 1000.0, produced,
+                        produced > 0 && t_end > t_first ? produced * 1e6 / (double) (t_end - t_first) : 0.0, stop);
     llama_batch_ext_free(batch);
     llama_sampler_free(smpl);
     env->DeleteLocalRef(sink_class);

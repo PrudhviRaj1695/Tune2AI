@@ -47,7 +47,7 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 ### T2AI-032 — Implement the chat path
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-SDK-3, FR-SDK-4 · **Depends on:** T2AI-022, T2AI-030, T2AI-031
 
 **Story:** As an application developer, I want chat requests to use the controller, context services, router, and inference runtime so that I complete a conversation through one SDK API.
@@ -60,9 +60,9 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-032.1 `core/chat/ChatPipeline.kt`: context assembly → route → `ensureLoaded` → generate → events.
-- [ ] T2AI-032.2 Chat message format and per-model chat template application (from backend metadata when available).
-- [ ] T2AI-032.3 Tests (JVM): end-to-end with `FakeBackend`, cancellation mid-stream, context trimmed report present.
+- [x] T2AI-032.1 The pipeline is `RequestController.chat` (route → context assembly → `acquire` → generate → events); no separate class was needed.
+- [x] T2AI-032.2 Chat message format; per-model chat templates are applied by the backend (llama.cpp reads the template from the GGUF file).
+- [x] T2AI-032.3 Tests (JVM): end-to-end with `FakeBackend`, cancellation mid-stream, context trimmed report present.
 
 ### T2AI-033 — Implement the tool calling engine
 

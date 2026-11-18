@@ -4,7 +4,7 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 
 ### T2AI-050 — Turn Tune2AI Studio into the Android sample
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 3 · **Requirements:** FR-APP-1, FR-APP-2 · **Depends on:** T2AI-041
 
 **Story:** As an Android developer, I want a sample app using the public SDK so that I see how to configure Tune2AI and complete a local chat request.
@@ -18,12 +18,12 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 
 **Tasks**
 
-- [ ] T2AI-050.1 Create the SDK instance in `MainActivity` (or an `Application` subclass) and close it in `onDestroy`.
-- [ ] T2AI-050.2 `StudioBridge.java` added with `addJavascriptInterface`: `send(prompt, mode, optionsJson)`, `cancel(requestId)`, `listModels()`. Events are pushed to JS with `evaluateJavascript` on the main thread.
-- [ ] T2AI-050.3 Model import: pick a GGUF file with the system file picker (`ACTION_OPEN_DOCUMENT`) and copy it to app-private storage.
-- [ ] T2AI-050.4 `app.js`: replace `simulate(request, emit)` with a bridge-backed source that emits the same event shapes (`step`, `first-token`, `delta`, `completed`, plus `failed`). The UI already streams deltas, animates the route, and cancels from the send button. Keep `simulate()` only as the fallback when the bridge is absent (browser preview), and remove the "Simulated" badge when the bridge is present.
-- [ ] T2AI-050.5 Show resource-limit and error events as toasts plus a failed trace state.
-- [ ] T2AI-050.6 Manual test script in `app/README.md`: import model, chat, cancel, low-memory behaviour.
+- [x] T2AI-050.1 Create the SDK instance in `MainActivity` (llama.cpp backend, "helpful-assistant" v3 default prompt) and close it in `onDestroy`.
+- [x] T2AI-050.2 `StudioBridge.java` added with `addJavascriptInterface`: `send(json)` (the page supplies its own request id), `cancel(id)`, `newSession()`, `listModels()`, `resources()`, `importModel()`. The WebView refuses to navigate away from the bundled page. Events are pushed to JS with `evaluateJavascript` on the main thread.
+- [x] T2AI-050.3 Model import: pick a GGUF file with the system file picker (`ACTION_OPEN_DOCUMENT`) and copy it to app-private storage; non-GGUF files are rejected. `.gguf` files already in `files/models/` are registered at startup (lets adb seed models).
+- [x] T2AI-050.4 `app.js`: replace `simulate(request, emit)` with a bridge-backed source that emits the same event shapes (`step`, `first-token`, `delta`, `completed`, plus `failed`). The UI already streams deltas, animates the route, and cancels from the send button. Keep `simulate()` only as the fallback when the bridge is absent (browser preview), and remove the "Simulated" badge when the bridge is present.
+- [x] T2AI-050.5 Show resource-limit and error events as toasts plus a failed trace state.
+- [x] T2AI-050.6 Manual test script in `app/README.md`. Verified on the emulator by driving the WebView over DevTools: chat, follow-up with history, cancel, trace.
 
 ### T2AI-051 — Provide an iOS sample
 
@@ -81,3 +81,4 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 - [ ] T2AI-053.2 Release workflow: tag → build → test → publish.
 - [ ] T2AI-053.3 CI size check for the `:sdk` AAR.
 - [ ] T2AI-053.4 `CHANGELOG.md` and the release notes template.
+- [ ] T2AI-053.5 Public API surface review (mark internals `internal`) and an API dump checked in CI (moved from T2AI-040.2).

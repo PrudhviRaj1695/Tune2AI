@@ -16,8 +16,17 @@ package com.tune2ai.sdk.api
 sealed interface Tune2AIEvent {
     val requestId: RequestId
 
-    /** The request reached a stage of the route. Drives the Studio route strip and trace. */
-    data class Progress(override val requestId: RequestId, val stage: Stage, val detail: String? = null) : Tune2AIEvent
+    /**
+     * The request reached a stage of the route. Drives the Studio route strip and trace.
+     * At [Stage.CONTEXT_ASSEMBLED], [sources] lists what went into the model input (for example
+     * `prompt:helpful-assistant@3`) and anything left out to fit the context.
+     */
+    data class Progress(
+        override val requestId: RequestId,
+        val stage: Stage,
+        val detail: String? = null,
+        val sources: List<String> = emptyList(),
+    ) : Tune2AIEvent
 
     /** A piece of generated text. Concatenate in order to get the full output. */
     data class TextDelta(override val requestId: RequestId, val text: String) : Tune2AIEvent
