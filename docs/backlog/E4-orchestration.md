@@ -66,29 +66,29 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 ### T2AI-033 — Implement the tool calling engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 5 · **Requirements:** FR-ORC-3, NFR-2 · **Depends on:** T2AI-001
 
 **Story:** As an application developer, I want tools registered and invoked through a Tool Calling Engine so that model-requested actions are validated and controlled.
 
 **Acceptance criteria**
 
-- Each tool declares a name, description, JSON input schema, and a suspend handler (D6).
+- Each tool declares a name, description, JSON input schema, timeout, and a handler (D6). Handlers take and return JSON strings (Java-friendly) and may block; they are interrupted on timeout or cancellation.
 - Inputs are validated against the schema before execution; timeouts and handler failures become tool results, not crashes.
 - Tools are allowed per request; a model cannot call a tool the request did not allow.
 - Tool call and result events are emitted; arguments and results are redacted from logs by default.
 
 **Tasks**
 
-- [ ] T2AI-033.1 `core/tools/Tool.kt`, `ToolRegistry.kt`.
-- [ ] T2AI-033.2 Minimal JSON-schema validator for the subset we support (object, string, number, integer, boolean, array, enum, required) on `kotlinx.serialization.json.JsonElement`; document the subset. (Not `org.json`: it is only a stub in JVM unit tests and is not multiplatform.)
-- [ ] T2AI-033.3 `ToolCallingEngine.kt`: allow-list check, validate, invoke with timeout, shape result.
-- [ ] T2AI-033.4 Tool-call parsing from model output (JSON block convention) with a clear error when malformed.
-- [ ] T2AI-033.5 Tests: invalid input rejected, disallowed tool rejected, timeout result, handler exception result, redaction.
+- [x] T2AI-033.1 `api/Tools.kt` (`Tool`, `ToolHandler`, `AgentLimits`); registration and validation live in `ToolCallingEngine`.
+- [x] T2AI-033.2 Minimal JSON-schema validator for the subset we support (object, string, number, integer, boolean, array, enum, required) on `kotlinx.serialization.json.JsonElement`; document the subset. (Not `org.json`: it is only a stub in JVM unit tests and is not multiplatform.)
+- [x] T2AI-033.3 `ToolCallingEngine.kt`: allow-list check, validate, invoke with timeout, shape result.
+- [x] T2AI-033.4 Tool-call parsing from model output: bare `{"tool": …, "arguments": …}` JSON or Qwen-style `<tool_call>` tags; text that starts like a call but does not parse is reported as malformed.
+- [x] T2AI-033.5 Tests: invalid input rejected, disallowed tool rejected, timeout result, handler exception result, redaction.
 
 ### T2AI-034 — Implement the agent engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 5 · **Requirements:** FR-ORC-4 · **Depends on:** T2AI-030, T2AI-032, T2AI-033
 
 **Story:** As an application developer, I want an Agent Engine to coordinate model responses and tool calls so that multi-step tasks complete through the Agent API.
@@ -102,9 +102,9 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-034.1 `core/agent/AgentEngine.kt`: loop of model step (via controller) → parse tool calls → invoke → append results.
-- [ ] T2AI-034.2 `AgentLimits` in request options; `limit reached` terminal state.
-- [ ] T2AI-034.3 Tests (scripted `FakeBackend`): tool round-trip, step limit, deadline, cancellation during a tool call.
+- [x] T2AI-034.1 `core/agent/AgentEngine.kt`: loop of model step (via controller) → parse tool calls → invoke → append results. Final answers stream live; steps that start like a tool call are held back so raw JSON is never shown.
+- [x] T2AI-034.2 `AgentLimits` (steps, tool calls); new error category `LIMIT_REACHED`.
+- [x] T2AI-034.3 Tests (scripted `FakeBackend`): tool round-trip, step limit, deadline, cancellation during a tool call.
 
 ### T2AI-035 — Implement the workflow engine
 

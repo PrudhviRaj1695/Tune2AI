@@ -41,7 +41,7 @@ const MODES = {
     title: "Give an agent a task. See every tool call.",
     copy: "Agents run bounded steps with tools your app registers, and stop at the limits you set.",
     placeholder: "Describe a task for the agent…",
-    suggestions: ["Check device headroom before loading a second model", "Plan a test run for the llama.cpp backend", "Find stale workflow checkpoints and propose a cleanup"],
+    suggestions: ["How much free memory does this device have?", "Which models are installed, and is one loaded?", "Check device headroom before loading a second model"],
     reply: () => `Done in 3 of 6 allowed steps.\n\n1 · resource_monitor → 3.6 GB free, thermal nominal\n2 · list_models → 1 loaded, 1 ready\n3 · Drafted the plan below\n\nLoading a second model fits now, but unload it when the app goes to the background. Every tool input was validated against its schema before it ran.`,
   },
   Workflow: {
@@ -254,12 +254,16 @@ function renderMode() {
   $("#empty-title").textContent = needsModel ? "Add a model to start." : mode.title;
   $("#empty-copy").textContent = needsModel
     ? "Import a GGUF model from this phone. It runs fully on-device; nothing is sent anywhere."
-    : live && state.mode !== "Chat" ? `${mode.copy} ${state.mode} runs are simulated until the ${state.mode} API ships.` : mode.copy;
+    : live && state.mode === "Workflow" ? `${mode.copy} Workflow runs are simulated until the Workflow API ships.` : mode.copy;
   els.prompt.placeholder = mode.placeholder;
   $("#suggestions").innerHTML = needsModel
     ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
     : mode.suggestions.map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
 }
+document.addEventListener("click", (event) => {
+  const link = event.target.closest("[data-goto]");
+  if (link) $(`[role="tab"][data-mode="${link.dataset.goto}"]`).click();
+});
 $$('[role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
   state.mode = tab.dataset.mode;
   renderMode();
@@ -351,6 +355,10 @@ function liveSource(prompt, emit) {
       last = now;
       return;
     }
+    if (e.type === "tool-call" || e.type === "tool-result") {
+      emit(e);
+      return;
+    }
     if (e.type === "delta") {
       if (first === null) {
         first = Math.round(performance.now() - start);
@@ -371,6 +379,7 @@ function liveSource(prompt, emit) {
   bridge.send(JSON.stringify({
     id,
     prompt,
+    mode: state.mode,
     model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
     backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),
@@ -416,6 +425,7 @@ function addAssistantMessage(simulated) {
       <strong>Tune2AI</strong><span>${state.execution === "remote" ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
     </div>
     <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l, i) => `${i ? '<span class="route-link"></span>' : ""}<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
+    <div class="tools"></div>
     <div class="answer is-streaming"><p></p></div>
     <div class="msg-foot"></div>`;
   els.conversation.append(msg);
@@ -430,8 +440,34 @@ function appendText(answer, text) {
   });
 }
 
+/* Tool activity in an agent reply: one expandable card per call, with arguments and result. */
+const prettyJson = (json) => {
+  try { return JSON.stringify(JSON.parse(json), null, 2); } catch { return json; }
+};
+
+function addToolCard(msg, e) {
+  const card = document.createElement("details");
+  card.className = "tool-card";
+  card.dataset.call = e.callId;
+  card.dataset.state = "running";
+  card.innerHTML = `<summary>${svgIcon("i-bot")}<span>Called <strong></strong></span><span class="tool-state">Running…</span></summary><pre></pre>`;
+  $("strong", card).textContent = e.name;
+  $("pre", card).textContent = prettyJson(e.arguments);
+  $(".tools", msg).append(card);
+}
+
+function finishToolCard(msg, e) {
+  const card = $(`[data-call="${e.callId}"]`, msg);
+  if (!card) return;
+  card.dataset.state = e.isError ? "error" : "done";
+  $(".tool-state", card).textContent = e.isError ? "Error" : "Done";
+  const result = document.createElement("pre");
+  result.textContent = prettyJson(e.result);
+  card.append(result);
+}
+
 function run(text) {
-  const simulated = !live || state.mode !== "Chat";
+  const simulated = !live || state.mode === "Workflow";
   state.hasRun = true;
   els.empty.hidden = true;
   addUserMessage(text);
@@ -467,6 +503,10 @@ function run(text) {
     } else if (event.type === "first-token") {
       firstMs = event.ms;
       $("#m-first").textContent = `${(event.ms / 1000).toFixed(2)} s`;
+    } else if (event.type === "tool-call") {
+      addToolCard(msg, event);
+    } else if (event.type === "tool-result") {
+      finishToolCard(msg, event);
     } else if (event.type === "delta") {
       appendText(answer, event.text);
     } else if (event.type === "completed") {

@@ -56,17 +56,21 @@ class ChatApi internal constructor(
         return stream(send(listOf(ChatMessage.user(message)), options, requestId), requestId, listener)
     }
 
-    internal fun stream(events: Flow<Tune2AIEvent>, requestId: RequestId, listener: EventListener): Cancellable {
-        val terminal = AtomicBoolean(false)
-        val job = scope.launch {
-            events.collect {
-                if (it is Tune2AIEvent.Terminal) terminal.set(true)
-                listener.onEvent(it)
-            }
+    internal fun stream(events: Flow<Tune2AIEvent>, requestId: RequestId, listener: EventListener): Cancellable =
+        streamTo(scope, events, requestId, listener)
+}
+
+/** Collects [events] into [listener]; delivers exactly one terminal event, including Cancelled after cancel. */
+internal fun streamTo(scope: CoroutineScope, events: Flow<Tune2AIEvent>, requestId: RequestId, listener: EventListener): Cancellable {
+    val terminal = AtomicBoolean(false)
+    val job = scope.launch {
+        events.collect {
+            if (it is Tune2AIEvent.Terminal) terminal.set(true)
+            listener.onEvent(it)
         }
-        job.invokeOnCompletion { if (!terminal.get()) listener.onEvent(Tune2AIEvent.Cancelled(requestId)) }
-        return Cancellable { job.cancel() }
     }
+    job.invokeOnCompletion { if (!terminal.get()) listener.onEvent(Tune2AIEvent.Cancelled(requestId)) }
+    return Cancellable { job.cancel() }
 }
 
 /**

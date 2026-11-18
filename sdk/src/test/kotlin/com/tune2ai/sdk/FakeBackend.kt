@@ -46,9 +46,13 @@ class FakeBackend(
         unloads++
     }
 
+    /** Scripted replies: each generate call takes the next one; when empty, [tokens] is used. */
+    val script = ArrayDeque<List<String>>()
+
     override fun generate(model: LoadedModel, request: GenerateRequest): Flow<String> = flow {
         lastRequest = request
-        tokens.take(request.maxTokens).forEachIndexed { i, token ->
+        val reply = synchronized(script) { script.removeFirstOrNull() } ?: tokens
+        reply.take(request.maxTokens).forEachIndexed { i, token ->
             if (i == failAfterTokens) throw Tune2AIException.BackendFailure("Scripted failure after $i tokens")
             delay(tokenDelayMillis)
             emit(token)

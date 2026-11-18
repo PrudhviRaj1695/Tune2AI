@@ -46,13 +46,13 @@ These are the defaults the backlog tasks are written against. Change a decision 
 | D4 | The Remote API backend uses `HttpURLConnection` and parses SSE by hand. | Avoids an HTTP client dependency for one streaming endpoint. | Retries, HTTP/2, or several providers make it painful: switch to OkHttp. |
 | D5 | Local storage starts as SQLite through the Android framework API (`SQLiteOpenHelper`). The vector index starts as a brute-force cosine scan. | No dependencies; correct for small corpora. | RAG corpora exceed ~10k chunks or retrieval exceeds the latency budget in [requirements.md](requirements.md). |
 | D7 | The Remote API backend speaks the **OpenAI-compatible Chat Completions** API with SSE streaming. The API key comes from an app callback per request and is never stored. | One adapter covers OpenAI, vLLM, Ollama, llama.cpp server, and most hosted providers. | A provider without an OpenAI-compatible endpoint is needed: add another wire format to `RemoteBackend`. |
+| D8 | **ONNX Runtime is deferred.** On-device models run through llama.cpp (GGUF); larger models through the Remote API backend. | ONNX Runtime GenAI is not published for Android on Maven Central; plain `onnxruntime-android` would need our own tokenizer and KV-cache code per model family. | A required model ships only as ONNX, or ONNX Runtime GenAI is published for Android. |
 | D6 | Tools are host-provided: the app registers Kotlin handlers with a JSON schema. No downloaded or interpreted code. | Answers the tool trust question with the smallest safe surface. | A real need for user-defined tools appears. |
 
 ## Decisions still open
 
 1. **State ownership:** is conversation and memory state owned by the app or stored by the SDK? Default until decided: stored by the SDK in app-private storage, clearable by the app (T2AI-004, T2AI-025).
 2. **Model catalog source:** is the catalog static in the SDK, supplied by the application, or fetched remotely? Default until decided: supplied by the application (T2AI-020).
-3. **ONNX Runtime backend (T2AI-012):** ONNX Runtime GenAI is not published for Android on Maven Central; plain `onnxruntime-android` would need our own tokenizer and KV-cache handling per model family. Decide: build on plain ORT, vendor a GenAI AAR, or drop ONNX in favour of llama.cpp (GGUF) only.
 
 ## Diagram conventions
 

@@ -99,6 +99,7 @@ class TerminalGuardTest {
                 ErrorCategory.TOOL_FAILURE -> Tune2AIException.ToolFailure("x")
                 ErrorCategory.STORAGE_FAILURE -> Tune2AIException.StorageFailure("x")
                 ErrorCategory.TIMEOUT -> Tune2AIException.Timeout("x")
+                ErrorCategory.LIMIT_REACHED -> Tune2AIException.LimitReached("x")
             }
         }
         assertEquals(ErrorCategory.entries, all.map { it.category })

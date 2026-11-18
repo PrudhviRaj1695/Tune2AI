@@ -36,9 +36,14 @@ Run setup → **Remote** takes any OpenAI-compatible API (base URL ending in `/v
 | 10 | Switch to Agent or Workflow | Replies are marked "Simulated" until those APIs ship |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
+| 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |
 | 13 | Run setup → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.
+
+## Agent tools
+
+Studio registers three demo tools in `MainActivity`: `device_status`, `list_models`, and `current_time`. Agents need a model that follows tool-calling instructions; SmolLM2-135M usually does not, Qwen2.5-0.5B-Instruct or larger does. Keep tool results small and plainly labelled: small models misread raw fields.
 
 ## Debugging the page
 

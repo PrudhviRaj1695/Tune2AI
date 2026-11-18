@@ -19,6 +19,9 @@ struct Session {
     llama_model * model = nullptr;
     llama_context * ctx = nullptr;
     std::atomic<bool> cancel{false};
+    // Tokens currently in the KV cache (sequence 0, positions 0..n-1). A new prompt that starts with
+    // the same tokens (chat history, agent steps) only processes what is new.
+    std::vector<llama_token> cached;
 };
 
 Session * session(jlong handle) { return reinterpret_cast<Session *>(handle); }
@@ -140,7 +143,6 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
                                                 jint max_tokens, jfloat temperature, jint seed, jobject sink) {
     Session * s = session(handle);
     s->cancel.store(false);
-    llama_memory_clear(llama_get_memory(s->ctx), true);
 
     const llama_vocab * vocab = llama_model_get_vocab(s->model);
     const std::string prompt = str(env, prompt_j);
@@ -154,6 +156,18 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
         return env->NewStringUTF(("Prompt is " + std::to_string(n_prompt) + " tokens; the context holds " + std::to_string(n_ctx)).c_str());
     }
     const int32_t budget = std::min<int32_t>(max_tokens, n_ctx - n_prompt);
+
+    // Reuse the cached prefix; always re-process at least the last prompt token for fresh logits.
+    llama_memory_t mem = llama_get_memory(s->ctx);
+    int32_t n_keep = 0;
+    while (n_keep < (int32_t) s->cached.size() && n_keep < n_prompt && s->cached[n_keep] == tokens[n_keep]) ++n_keep;
+    n_keep = std::min(n_keep, n_prompt - 1);
+    if (!llama_memory_seq_rm(mem, 0, n_keep, -1)) { // some model types cannot trim; start over
+        llama_memory_clear(mem, true);
+        n_keep = 0;
+    }
+    s->cached.resize(n_keep);
+    bool dirty = false; // KV contents no longer match `cached` (abort mid-batch)
 
     jclass sink_class = env->GetObjectClass(sink);
     jmethodID on_piece = env->GetMethodID(sink_class, "onPiece", "([B)Z");
@@ -172,13 +186,15 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
     const char * error = nullptr;
 
     const int64_t t_start = ggml_time_us();
-    // Prompt, in chunks of n_batch; logits only for the very last prompt token.
-    for (int32_t i = 0; i < n_prompt && !error; i += n_batch) {
+    // Prompt (new part only), in chunks of n_batch; logits only for the very last prompt token.
+    for (int32_t i = n_keep; i < n_prompt && !error; i += n_batch) {
         const int32_t n = std::min(n_batch, n_prompt - i);
         batch_set_tokens(batch, tokens.data() + i, n, i, i + n == n_prompt);
         const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
-        if (rc == 2 || s->cancel.load()) break;
-        if (rc != 0) error = "llama.cpp failed to process the prompt";
+        if (rc == 2) { dirty = true; break; }
+        if (rc != 0) { error = "llama.cpp failed to process the prompt"; break; }
+        s->cached.insert(s->cached.end(), tokens.begin() + i, tokens.begin() + i + n);
+        if (s->cancel.load()) break;
     }
 
     std::string pending;
@@ -207,15 +223,20 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
 
         batch_set_tokens(batch, &tok, 1, pos++, true);
         const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
-        if (rc == 2) break;
-        if (rc != 0) error = "llama.cpp failed while generating";
+        if (rc == 2) { dirty = true; break; }
+        if (rc != 0) { error = "llama.cpp failed while generating"; break; }
+        s->cached.push_back(tok);
+    }
+    if (dirty || error) { // unknown KV state: forget the cache rather than reuse a wrong one
+        llama_memory_clear(mem, true);
+        s->cached.clear();
     }
 
     if (s->cancel.load()) stop = "cancelled";
     if (error) stop = "error";
     const int64_t t_end = ggml_time_us();
-    __android_log_print(ANDROID_LOG_INFO, TAG, "prompt %d tokens (%.0f ms), generated %d tokens (%.1f tok/s), stop=%s",
-                        n_prompt, (t_first ? t_first - t_start : 0) / 1000.0, produced,
+    __android_log_print(ANDROID_LOG_INFO, TAG, "prompt %d tokens (%d cached, %.0f ms), generated %d tokens (%.1f tok/s), stop=%s",
+                        n_prompt, n_keep, (t_first ? t_first - t_start : 0) / 1000.0, produced,
                         produced > 0 && t_end > t_first ? produced * 1e6 / (double) (t_end - t_first) : 0.0, stop);
     llama_batch_ext_free(batch);
     llama_sampler_free(smpl);

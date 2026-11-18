@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** Milestones 1–4 are done except ONNX Runtime (T2AI-012, blocked on a decision). Tune2AI Studio is live: on-device chat through llama.cpp and remote chat through any OpenAI-compatible endpoint, both through the public SDK. Agent/Workflow modes, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
+**Current state:** Milestones 1–5 are done (ONNX Runtime, T2AI-012, is deferred by decision D8). Tune2AI Studio is live: on-device chat through llama.cpp and remote chat through any OpenAI-compatible endpoint, both through the public SDK. Agent mode is live (tools: `device_status`, `list_models`, `current_time`). Workflow mode, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
 
 ## Where things are
 

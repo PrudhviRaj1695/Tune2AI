@@ -9,6 +9,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import com.tune2ai.sdk.Tune2AI;
+import com.tune2ai.sdk.api.AgentLimits;
 import com.tune2ai.sdk.api.BackendInfo;
 import com.tune2ai.sdk.api.Cancellable;
 import com.tune2ai.sdk.api.ModelDescriptor;
@@ -78,7 +79,11 @@ final class StudioBridge {
                     120_000L,
                     req.optInt("maxTokens", 512),
                     (float) req.optDouble("temperature", 0.7));
-            running.put(id, ai.getChat().session(SESSION).stream(req.getString("prompt"), options, event -> deliver(id, event)));
+            String prompt = req.getString("prompt");
+            Cancellable handle = "Agent".equals(req.optString("mode"))
+                    ? ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event))
+                    : ai.getChat().session(SESSION).stream(prompt, options, event -> deliver(id, event));
+            running.put(id, handle);
         } catch (JSONException e) {
             notice("Could not read the request: " + e.getMessage());
         }
@@ -288,8 +293,21 @@ final class StudioBridge {
                 o.put("type", "failed");
                 o.put("category", f.getError().getCategory().name());
                 o.put("message", f.getError().getMessage());
+            } else if (event instanceof Tune2AIEvent.ToolCall) {
+                Tune2AIEvent.ToolCall c = (Tune2AIEvent.ToolCall) event;
+                o.put("type", "tool-call");
+                o.put("callId", c.getCallId());
+                o.put("name", c.getName());
+                o.put("arguments", c.getArgumentsJson());
+            } else if (event instanceof Tune2AIEvent.ToolResult) {
+                Tune2AIEvent.ToolResult r = (Tune2AIEvent.ToolResult) event;
+                o.put("type", "tool-result");
+                o.put("callId", r.getCallId());
+                o.put("name", r.getName());
+                o.put("result", r.getResultJson());
+                o.put("isError", r.isError());
             } else {
-                return; // tool events arrive with the Agent API (T2AI-042)
+                return;
             }
         } catch (JSONException e) {
             return;

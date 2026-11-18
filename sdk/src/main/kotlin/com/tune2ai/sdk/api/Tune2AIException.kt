@@ -15,6 +15,7 @@ enum class ErrorCategory {
     TOOL_FAILURE,
     STORAGE_FAILURE,
     TIMEOUT,
+    LIMIT_REACHED,
 }
 
 /** Every failure the SDK reports. Match on the subclass or on [category]. */
@@ -53,5 +54,10 @@ sealed class Tune2AIException(message: String, cause: Throwable? = null) : Excep
 
     class Timeout(message: String) : Tune2AIException(message) {
         override val category get() = ErrorCategory.TIMEOUT
+    }
+
+    /** An agent or workflow used its step or tool-call budget before finishing. */
+    class LimitReached(message: String) : Tune2AIException(message) {
+        override val category get() = ErrorCategory.LIMIT_REACHED
     }
 }

@@ -229,6 +229,23 @@ h1, h2, h3, p { margin: 0; }
   content: ""; display: inline-block; width: 8px; height: 1.1em; margin-left: 2px; vertical-align: -.15em;
   border-radius: 2px; background: var(--accent); animation: blink 1s steps(1) infinite;
 }
+.tools { display: grid; gap: 6px; margin-left: 36px; }
+.tools:empty { display: none; }
+.tool-card { overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.tool-card summary {
+  display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px;
+  color: var(--ink-2); font-size: 13px; cursor: pointer; list-style: none;
+}
+.tool-card summary::-webkit-details-marker { display: none; }
+.tool-card summary .icon { width: 16px; height: 16px; color: var(--accent-text); }
+.tool-card summary strong { color: var(--ink); font-family: var(--mono); font-weight: 600; }
+.tool-state { margin-left: auto; color: var(--accent-text); font-size: 12px; font-weight: 700; }
+.tool-card[data-state="done"] .tool-state { color: var(--live); }
+.tool-card[data-state="error"] .tool-state { color: var(--danger); }
+.tool-card pre {
+  margin: 0; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface-2);
+  font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+}
 .msg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: 36px; }
 .chip { display: inline-flex; align-items: center; gap: 4px; min-height: 26px; padding: 0 10px; border: 0; border-radius: 99px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 500; }
 .chip-stats { border: 0; font-variant-numeric: tabular-nums; }

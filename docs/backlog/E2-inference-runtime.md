@@ -43,11 +43,12 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 - [x] T2AI-011.3 JNI bridge (`llama_jni.cpp`): load model, create context, chat template, tokenize, chunked prompt + decode loop on the new `llama_batch_ext`/`llama_process` API (`llama_decode` is deprecated at this tag), cancel flag checked per token and via llama.cpp's abort callback, UTF-8-safe streaming, free.
 - [x] T2AI-011.4 `LlamaBackend.kt`: wraps the bridge on a small dedicated dispatcher (`Dispatchers.IO.limitedParallelism(2)`), one generation per model at a time; emits text as a `Flow`.
 - [x] T2AI-011.5 Pre-load check: `LlamaBackend.estimateMemoryBytes` (file size + overhead, `ponytail:` note) feeds `ModelDescriptor.memoryBytes`; the Model Manager refuses loads that break `ResourceLimits` (NFR-8). The backend also rejects non-GGUF files before calling native code.
+- [x] T2AI-011.7 KV prompt cache (added with milestone 5): a prompt that shares a prefix with the cached tokens only processes the new part; `PromptCacheTest` checks output is identical with and without the cache.
 - [x] T2AI-011.6 Tests: contract suite as an instrumented test with SmolLM2-135M-Instruct Q8_0 pushed via `adb` (documented in `TestModel.kt` and AGENTS.md), plus `FirstTokensTest` for the full route. Emulator result: "The capital of France is Paris.", ~47 tok/s.
 
 ### T2AI-012 — Integrate the ONNX Runtime backend
 
-- **Status:** Blocked (ONNX Runtime GenAI is not on Maven Central; see open decision 3 in architecture.md)
+- **Status:** Deferred (decision D8 in architecture.md: llama.cpp + Remote API cover on-device and large models)
 - **Milestone:** 4 · **Requirements:** FR-INF-3 · **Depends on:** T2AI-010
 
 **Story:** As an application developer, I want to run supported ONNX models through ONNX Runtime so that I can use this backend through the same SDK contract.

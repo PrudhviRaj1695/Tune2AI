@@ -41,7 +41,7 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 ### T2AI-042 — Publish the Agent API
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 5 · **Requirements:** FR-SDK-5 · **Depends on:** T2AI-034, T2AI-040
 
 **Story:** As an application developer, I want an Agent API for bounded tool-using tasks so that I request multi-step execution through the SDK.
@@ -53,8 +53,8 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 **Tasks**
 
-- [ ] T2AI-042.1 `api/AgentApi.kt` over `AgentEngine`.
-- [ ] T2AI-042.2 Tests: each terminal outcome reachable through the public API.
+- [x] T2AI-042.1 `api/AgentApi.kt` over `AgentEngine`: `run` (Flow) and `stream` (Java callback); tools registered with `Tune2AI.Builder.addTool`.
+- [x] T2AI-042.2 Tests: each terminal outcome reachable through the public API.
 
 ### T2AI-043 — Publish the Workflow API
 

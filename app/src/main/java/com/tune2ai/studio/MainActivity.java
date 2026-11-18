@@ -13,7 +13,17 @@ import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.window.OnBackInvokedDispatcher;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.Date;
+
 import com.tune2ai.sdk.Tune2AI;
+import com.tune2ai.sdk.api.ModelInfo;
+import com.tune2ai.sdk.api.ModelState;
+import com.tune2ai.sdk.api.ResourceSnapshot;
+import com.tune2ai.sdk.api.Tool;
 import com.tune2ai.sdk.llama.LlamaBackend;
 import com.tune2ai.sdk.remote.RemoteBackend;
 import com.tune2ai.sdk.services.prompt.PromptTemplate;
@@ -36,6 +46,16 @@ public final class MainActivity extends Activity {
                 .addPromptTemplate(new PromptTemplate("helpful-assistant", 3,
                         "Be concise, accurate, and use supplied context when relevant."))
                 .defaultPromptTemplate("helpful-assistant")
+                // Demo tools for Agent mode. Handlers run on a background thread.
+                .addTool(new Tool("device_status",
+                        "Reports this device's free memory, battery level, and thermal state.",
+                        args -> deviceStatus()))
+                .addTool(new Tool("list_models",
+                        "Lists the AI models installed in Tune2AI Studio and whether each is loaded.",
+                        args -> modelsSummary()))
+                .addTool(new Tool("current_time",
+                        "Returns the current local date and time.",
+                        args -> JSONObject.quote(new Date().toString())))
                 .build();
 
         webView = new WebView(this);
@@ -78,6 +98,41 @@ public final class MainActivity extends Activity {
                     OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
         }
         webView.loadUrl(PAGE_ROOT + "index.html");
+    }
+
+    /** Compact, plainly labelled model list: small models misread raw fields like sizeBytes. */
+    private String modelsSummary() {
+        JSONArray out = new JSONArray();
+        for (ModelInfo info : ai.getModels().listBlocking()) {
+            JSONObject o = new JSONObject();
+            try {
+                o.put("name", info.getDescriptor().getName());
+                o.put("runs_on", RemoteBackend.FORMAT.equals(info.getDescriptor().getFormat()) ? "remote server" : "this device");
+                ModelState state = info.getState();
+                o.put("status", state instanceof ModelState.Loaded ? "loaded"
+                        : state instanceof ModelState.Unavailable ? "unavailable" : "installed, not loaded");
+                out.put(o);
+            } catch (JSONException ignored) {
+                // values above are always valid
+            }
+        }
+        return out.toString();
+    }
+
+    private String deviceStatus() {
+        ResourceSnapshot s = ai.resources();
+        JSONObject o = new JSONObject();
+        try {
+            o.put("free_memory_mb", s.getAvailableMemoryBytes() / (1024 * 1024));
+            o.put("total_memory_mb", s.getTotalMemoryBytes() / (1024 * 1024));
+            o.put("low_memory", s.getLowMemory());
+            o.put("battery_percent", s.getBatteryPercent() == null ? JSONObject.NULL : s.getBatteryPercent());
+            o.put("charging", s.getCharging() == null ? JSONObject.NULL : s.getCharging());
+            o.put("thermal", s.getThermal().name().toLowerCase(java.util.Locale.ROOT));
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        return o.toString();
     }
 
     @Override

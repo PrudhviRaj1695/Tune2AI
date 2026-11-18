@@ -32,7 +32,7 @@ Work milestones in order. Within a milestone, follow each story's **Depends on**
 
 ## Conventions
 
-- **Status** values: `Todo`, `In progress`, `Blocked (<reason>)`, `Done`. Status lives only in the story; see all with `grep -rn "Status:" docs/backlog`.
+- **Status** values: `Todo`, `In progress`, `Blocked (<reason>)`, `Deferred (<decision>)`, `Done`. Status lives only in the story; see all with `grep -rn "Status:" docs/backlog`.
 - **Tasks** are checkboxes with IDs (`T2AI-001.2`). Tick a task when its code is merged and verified.
 - A story is `Done` when every task is ticked and the Definition of Done in [AGENTS.md](../../AGENTS.md#definition-of-done) holds.
 - Requirement IDs (`FR-…`, `NFR-…`) link stories back to [requirements.md](../requirements.md). Keep both sides in sync when adding or splitting stories.
