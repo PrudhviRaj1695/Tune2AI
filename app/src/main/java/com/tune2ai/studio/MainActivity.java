@@ -1,12 +1,14 @@
 package com.tune2ai.studio;
 
 import android.app.Activity;
-import android.graphics.Color;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
-import android.webkit.WebChromeClient;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+import android.window.OnBackInvokedDispatcher;
 
 public final class MainActivity extends Activity {
     private WebView webView;
@@ -14,31 +16,46 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().setStatusBarColor(Color.rgb(16, 25, 45));
-        getWindow().setNavigationBarColor(Color.rgb(16, 25, 45));
-        getWindow().getDecorView().setSystemUiVisibility(0);
 
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(246, 248, 251));
+        webView.setBackgroundColor(getColor(R.color.canvas));
         webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-        webView.getSettings().setJavaScriptEnabled(true);
-        webView.getSettings().setDomStorageEnabled(true);
-        webView.getSettings().setAllowFileAccess(true);
-        webView.getSettings().setAllowContentAccess(false);
-        webView.getSettings().setSupportZoom(false);
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        setContentView(webView);
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        // file:///android_asset stays readable; this only blocks the rest of the filesystem.
+        settings.setAllowFileAccess(false);
+        settings.setAllowContentAccess(false);
+        settings.setSupportZoom(false);
+
+        // Edge-to-edge is enforced from targetSdk 35: pad for system bars and the keyboard.
+        FrameLayout root = new FrameLayout(this);
+        root.setBackgroundColor(getColor(R.color.canvas));
+        root.addView(webView);
+        root.setOnApplyWindowInsetsListener((v, insets) -> {
+            v.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                    insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
+            return insets;
+        });
+        setContentView(root);
+
+        if (Build.VERSION.SDK_INT >= 33) {
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
+        }
         webView.loadUrl("file:///android_asset/www/index.html");
     }
 
+    private void handleBack() {
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else finish();
+    }
+
     @Override
+    @SuppressWarnings("deprecation") // only reached below API 33
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        handleBack();
     }
 
     @Override
