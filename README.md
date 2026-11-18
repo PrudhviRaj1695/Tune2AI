@@ -10,4 +10,11 @@ The app requires Android API 26 or later. Playground replies are currently simul
 
 ## Web preview
 
-Serve the project root with any static file server and open `index.html`.
+The web UI lives only in `app/src/main/assets/www/`. Serve that folder with any static file server (for example `python -m http.server -d app/src/main/assets/www`) and open `index.html`.
+
+## Project docs
+
+- [docs/requirements.md](docs/requirements.md) — requirements
+- [docs/architecture.md](docs/architecture.md) — architecture, diagram, and technical decisions
+- [docs/backlog/](docs/backlog/README.md) — epics, stories, tasks, and milestones
+- [AGENTS.md](AGENTS.md) — context and working rules for contributors and coding agents
