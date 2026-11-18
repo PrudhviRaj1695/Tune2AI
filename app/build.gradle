@@ -1,4 +1,6 @@
-apply plugin: 'com.android.application'
+plugins {
+    id 'com.android.application'
+}
 
 android {
     namespace 'com.tune2ai.studio'
@@ -7,7 +9,7 @@ android {
     defaultConfig {
         applicationId 'com.tune2ai.studio'
         minSdk 26
-        targetSdk 35
+        targetSdk 36
         versionCode 1
         versionName '1.0.0'
     }
