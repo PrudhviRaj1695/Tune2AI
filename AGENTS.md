@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** Milestones 1–3 are done. Tune2AI Studio is live: it chats with a GGUF model on the device through the public SDK (`Tune2AI` → `ChatApi` → controller → router → Model Manager → llama.cpp). Agent/Workflow modes, the remote backend, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
+**Current state:** Milestones 1–4 are done except ONNX Runtime (T2AI-012, blocked on a decision). Tune2AI Studio is live: on-device chat through llama.cpp and remote chat through any OpenAI-compatible endpoint, both through the public SDK. Agent/Workflow modes, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
 
 ## Where things are
 
@@ -19,7 +19,8 @@ Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflo
 | `scripts/architecture_diagram.py` | Regenerates `docs/architecture.svg` |
 | `sdk/` | The SDK (Kotlin). Packages: `api` (public types), `core`, `services`, `inference`, `platform/android`. Tests: `src/test` (JVM), `src/androidTest` (device), `src/sharedTest` (contracts run on both) |
 | `sdk-llama/` | llama.cpp backend: Kotlin `LlamaBackend` + JNI bridge `src/main/cpp/llama_jni.cpp`. llama.cpp is a git submodule pinned to a release tag (clone with `--recurse-submodules`) |
-| `sdk-onnx/`, `sdk-remote/` | Planned backend modules (decision D3) |
+| `sdk-remote/` | Remote backend: OpenAI-compatible Chat Completions over HTTPS + SSE (decision D7). The only SDK module with `INTERNET` |
+| `docs/backend-guide.md` | How to write and test a new backend |
 | `models/` | Local model files for testing (git-ignored) |
 
 ## Build and test

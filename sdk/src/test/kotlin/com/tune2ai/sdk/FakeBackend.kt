@@ -20,8 +20,11 @@ class FakeBackend(
     var loadDelayMillis: Long = 0,
     var failLoad: Tune2AIException? = null,
     var failAfterTokens: Int? = null,
+    var unavailable: String? = null,
+    network: Boolean = false,
 ) : InferenceBackend {
-    override val capabilities = BackendCapabilities(formats, setOf(Task.CHAT))
+    override val capabilities = BackendCapabilities(formats, setOf(Task.CHAT), requiresNetwork = network)
+    override val unavailableReason: String? get() = unavailable
     var loads = 0
         private set
     var unloads = 0

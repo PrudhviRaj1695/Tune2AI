@@ -15,6 +15,7 @@ import android.window.OnBackInvokedDispatcher;
 
 import com.tune2ai.sdk.Tune2AI;
 import com.tune2ai.sdk.llama.LlamaBackend;
+import com.tune2ai.sdk.remote.RemoteBackend;
 import com.tune2ai.sdk.services.prompt.PromptTemplate;
 
 public final class MainActivity extends Activity {
@@ -23,6 +24,7 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private Tune2AI ai;
     private StudioBridge bridge;
+    private final RemoteSettings remote = new RemoteSettings();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -30,6 +32,7 @@ public final class MainActivity extends Activity {
 
         ai = new Tune2AI.Builder(this)
                 .addBackend(new LlamaBackend())
+                .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
                 .addPromptTemplate(new PromptTemplate("helpful-assistant", 3,
                         "Be concise, accurate, and use supplied context when relevant."))
                 .defaultPromptTemplate("helpful-assistant")
@@ -56,7 +59,7 @@ public final class MainActivity extends Activity {
             WebView.setWebContentsDebuggingEnabled(true); // chrome://inspect in debug builds only
         }
 
-        bridge = new StudioBridge(this, webView, ai);
+        bridge = new StudioBridge(this, webView, ai, remote);
         webView.addJavascriptInterface(bridge, "Tune2AIBridge");
 
         // Edge-to-edge is enforced from targetSdk 35: pad for system bars and the keyboard.

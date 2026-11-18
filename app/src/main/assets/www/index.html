@@ -47,7 +47,7 @@
         </div>
         <div class="rail-items">
           <button class="nav-item is-active" type="button" aria-current="page"><svg class="icon"><use href="#i-spark" /></svg><span>Playground</span></button>
-          <button class="nav-item" type="button" data-soon="Models arrive with the Model API (T2AI-044)."><svg class="icon"><use href="#i-cube" /></svg><span>Models</span></button>
+          <button class="nav-item" type="button" data-open="setup"><svg class="icon"><use href="#i-cube" /></svg><span>Models</span></button>
           <button class="nav-item" type="button" data-soon="Agents arrive with the Agent API (T2AI-042)."><svg class="icon"><use href="#i-bot" /></svg><span>Agents</span></button>
           <button class="nav-item" type="button" data-soon="Workflows arrive with the Workflow API (T2AI-043)."><svg class="icon"><use href="#i-flow" /></svg><span>Workflows</span></button>
           <div class="rail-divider" role="separator"></div>
@@ -93,6 +93,12 @@
                   <label><input type="radio" name="execution" value="remote" /><span><svg class="icon"><use href="#i-cloud" /></svg>Remote</span></label>
                 </div>
                 <p class="hint" id="execution-hint">Runs on this phone. Nothing leaves the device.</p>
+                <div class="remote-form" id="remote-form" hidden>
+                  <label class="field"><span>API base URL</span><input id="remote-url" type="url" inputmode="url" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" /></label>
+                  <label class="field"><span>API key</span><input id="remote-key" type="password" placeholder="Kept in memory only" autocomplete="off" /></label>
+                  <label class="field"><span>Model</span><input id="remote-model" type="text" placeholder="For example gpt-4o-mini or qwen2.5" autocomplete="off" spellcheck="false" /></label>
+                  <button class="import-model" type="button" id="remote-save">Save remote endpoint</button>
+                </div>
               </fieldset>
 
               <fieldset class="group">
@@ -208,7 +214,7 @@
 
         <nav class="tabbar" aria-label="Studio">
           <button class="is-active" type="button" aria-current="page"><svg class="icon"><use href="#i-spark" /></svg><span>Playground</span></button>
-          <button type="button" data-soon="Models arrive with the Model API (T2AI-044)."><svg class="icon"><use href="#i-cube" /></svg><span>Models</span></button>
+          <button type="button" data-open="setup"><svg class="icon"><use href="#i-cube" /></svg><span>Models</span></button>
           <button type="button" data-soon="Agents arrive with the Agent API (T2AI-042)."><svg class="icon"><use href="#i-bot" /></svg><span>Agents</span></button>
           <button type="button" data-soon="Workflows arrive with the Workflow API (T2AI-043)."><svg class="icon"><use href="#i-flow" /></svg><span>Workflows</span></button>
           <button type="button" data-soon="Settings arrive with the SDK configuration (T2AI-040)."><svg class="icon"><use href="#i-more" /></svg><span>More</span></button>

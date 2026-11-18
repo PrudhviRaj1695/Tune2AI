@@ -36,6 +36,9 @@ interface InferenceBackend {
     val id: String
     val capabilities: BackendCapabilities
 
+    /** Why this backend cannot run anything right now (for example, no API key), or null if it can. */
+    val unavailableReason: String? get() = null
+
     suspend fun load(model: ModelDescriptor): LoadedModel
 
     suspend fun unload(model: LoadedModel)
@@ -43,9 +46,10 @@ interface InferenceBackend {
     fun generate(model: LoadedModel, request: GenerateRequest): Flow<String>
 }
 
-/** True if this backend may run [model] for [task]. */
+/** True if this backend supports [model]'s format and is allowed to run it (ignores availability). */
+fun InferenceBackend.supports(model: ModelDescriptor): Boolean =
+    model.format in capabilities.formats && (model.backends.isEmpty() || id in model.backends)
+
+/** True if this backend is available and may run [model] for [task]. */
 fun InferenceBackend.canRun(model: ModelDescriptor, task: Task): Boolean =
-    model.format in capabilities.formats &&
-        task in capabilities.tasks &&
-        task in model.tasks &&
-        (model.backends.isEmpty() || id in model.backends)
+    unavailableReason == null && supports(model) && task in capabilities.tasks && task in model.tasks

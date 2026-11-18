@@ -75,10 +75,8 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 ### T2AI-044 — Publish the Model API
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 4 · **Requirements:** FR-SDK-7 · **Depends on:** T2AI-020, T2AI-040
-
-**Progress:** a minimal `ModelsApi` (register, list, states, remove) shipped with T2AI-050 for Studio's model import.
 
 **Story:** As an application developer, I want a Model API to discover and manage models so that I prepare models before sending requests.
 
@@ -89,5 +87,5 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 **Tasks**
 
-- [ ] T2AI-044.1 `api/ModelApi.kt`: `register`, `list`, `state(id): StateFlow`, `load`, `unload`.
-- [ ] T2AI-044.2 Tests: state transitions observed through the public API; load refused under resource limit.
+- [x] T2AI-044.1 `api/ModelsApi.kt`: `register`, `list` (`ModelInfo`: descriptor, state, compatible backends), `state(id): StateFlow`, `load`, `unload`, `remove`, plus blocking variants for Java.
+- [x] T2AI-044.2 Tests: state transitions observed through the public API; load refused under resource limit.

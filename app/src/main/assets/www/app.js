@@ -16,7 +16,15 @@ const REMOTE_TPS = 88;
 const bridge = window.Tune2AIBridge || null;
 const live = Boolean(bridge);
 const NO_MODEL = { name: "No model yet", short: "No model", backend: "llama.cpp", mono: "—", size: "", memory: "—", memoryPct: 0, tps: 0 };
-const currentModel = () => MODELS[state.model] || NO_MODEL;
+const currentModel = () => {
+  if (live && state.execution === "remote") {
+    const r = state.remoteModel;
+    return r
+      ? { ...NO_MODEL, name: r.name, short: r.name.length > 18 ? `${r.name.slice(0, 17)}…` : r.name, backend: "Remote API", mono: "API" }
+      : { ...NO_MODEL, name: "No remote model", short: "No remote model", backend: "Remote API" };
+  }
+  return MODELS[state.model] || NO_MODEL;
+};
 const formatBytes = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
 
 const MODES = {
@@ -128,7 +136,9 @@ document.addEventListener("click", (event) => {
 });
 
 function loadLiveModels() {
-  const list = JSON.parse(bridge.listModels());
+  const all = JSON.parse(bridge.listModels());
+  state.remoteModel = all.find((m) => m.format === "remote") || null;
+  const list = all.filter((m) => m.format !== "remote");
   MODELS = Object.fromEntries(list.map((m) => [m.id, {
     name: m.name,
     short: m.name.length > 18 ? `${m.name.slice(0, 17)}…` : m.name,
@@ -156,6 +166,24 @@ function contextItems() {
   ].filter(Boolean);
 }
 
+function remoteHint() {
+  const s = JSON.parse(bridge.remoteStatus());
+  if (s.unavailable) return `Not ready: ${s.unavailable}.`;
+  return `Sends requests to ${s.baseUrl}. Same route, same events.`;
+}
+
+$("#remote-save").addEventListener("click", () => {
+  const error = bridge.setRemote(JSON.stringify({
+    baseUrl: $("#remote-url").value,
+    apiKey: $("#remote-key").value,
+    model: $("#remote-model").value,
+  }));
+  if (error) return toast(error);
+  $("#remote-key").value = "";
+  $("#remote-key").placeholder = "Saved · kept in memory only";
+  toast("Remote endpoint saved.");
+});
+
 /* Trace labels for the SDK's context sources, e.g. "prompt:helpful-assistant@3". */
 function describeSource(source) {
   const omitted = source.startsWith("omitted ");
@@ -175,8 +203,9 @@ function renderRuntime() {
   chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change run setup`);
   $("#rail-backend").textContent = remote ? "Remote API" : `${model.backend} · Android`;
   $("#execution-hint").textContent = remote
-    ? "Sent to the Remote API backend over HTTPS. Same route, same events."
+    ? live ? remoteHint() : "Sent to the Remote API backend over HTTPS. Same route, same events."
     : "Runs on this phone. Nothing leaves the device.";
+  $("#remote-form").hidden = !(live && remote);
   if (live) {
     const r = JSON.parse(bridge.resources());
     const used = r.totalBytes - r.availableBytes;
@@ -342,7 +371,8 @@ function liveSource(prompt, emit) {
   bridge.send(JSON.stringify({
     id,
     prompt,
-    model: state.model || null,
+    model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
+    backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),
     maxTokens: Number($("#max-tokens").value),
   }));
@@ -532,11 +562,8 @@ $("#new-session").addEventListener("click", () => {
 
 /* ---------- Start ---------- */
 if (live) {
-  // Not in the SDK yet: remote backend (T2AI-015), memory (T2AI-025), RAG (T2AI-024).
+  // Not wired in Studio yet: memory (T2AI-025), RAG (T2AI-024).
   $(".sim-badge").hidden = true;
-  const remoteInput = $('input[value="remote"]');
-  remoteInput.disabled = true;
-  remoteInput.closest("label").title = "The Remote API backend arrives with T2AI-015";
   state.memory = false;
   state.rag = false;
   [["#memory-switch", "Arrives with the memory engine (T2AI-025)"], ["#rag-switch", "Arrives with the RAG engine (T2AI-024)"]].forEach(([id, note]) => {

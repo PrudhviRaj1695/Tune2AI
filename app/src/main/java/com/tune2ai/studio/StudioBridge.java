@@ -9,14 +9,17 @@ import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
 import com.tune2ai.sdk.Tune2AI;
+import com.tune2ai.sdk.api.BackendInfo;
 import com.tune2ai.sdk.api.Cancellable;
 import com.tune2ai.sdk.api.ModelDescriptor;
+import com.tune2ai.sdk.api.ModelInfo;
 import com.tune2ai.sdk.api.ModelState;
 import com.tune2ai.sdk.api.RequestOptions;
 import com.tune2ai.sdk.api.ResourceSnapshot;
 import com.tune2ai.sdk.api.Task;
 import com.tune2ai.sdk.api.Tune2AIEvent;
 import com.tune2ai.sdk.llama.LlamaBackend;
+import com.tune2ai.sdk.remote.RemoteBackend;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -44,18 +47,21 @@ final class StudioBridge {
     static final int IMPORT_REQUEST = 41;
     private static final String SESSION = "studio";
     private static final int CONTEXT_LENGTH = 4096;
+    private static final String REMOTE_MODEL_ID = "remote-model";
 
     private final Activity activity;
     private final WebView webView;
     private final Tune2AI ai;
+    private final RemoteSettings remote;
     private final File modelsDir;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
     private final Map<String, Cancellable> running = new ConcurrentHashMap<>();
 
-    StudioBridge(Activity activity, WebView webView, Tune2AI ai) {
+    StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote) {
         this.activity = activity;
         this.webView = webView;
         this.ai = ai;
+        this.remote = remote;
         this.modelsDir = new File(activity.getFilesDir(), "models");
         io.execute(this::registerModelsInStorage);
     }
@@ -68,7 +74,7 @@ final class StudioBridge {
             String id = req.getString("id");
             RequestOptions options = new RequestOptions(
                     req.isNull("model") ? null : req.getString("model"),
-                    null,
+                    req.isNull("backend") ? null : req.getString("backend"),
                     120_000L,
                     req.optInt("maxTokens", 512),
                     (float) req.optDouble("temperature", 0.7));
@@ -91,13 +97,58 @@ final class StudioBridge {
         ai.getChat().session(SESSION).clearAsync();
     }
 
+    /**
+     * Sets the remote endpoint. Returns an error message, or "" on success. The key stays in memory;
+     * an empty key keeps the current one.
+     */
+    @JavascriptInterface
+    public String setRemote(String json) {
+        try {
+            JSONObject o = new JSONObject(json);
+            String url = o.optString("baseUrl").trim();
+            String model = o.optString("model").trim();
+            String key = o.optString("apiKey").trim();
+            if (url.isEmpty() || model.isEmpty()) return "Enter the API base URL and a model name.";
+            String invalid = RemoteBackend.validateBaseUrl(url);
+            if (invalid != null) return invalid;
+            remote.baseUrl = url;
+            remote.model = model;
+            if (!key.isEmpty()) remote.apiKey = key;
+            io.execute(() -> {
+                ai.getModels().registerBlocking(new ModelDescriptor(REMOTE_MODEL_ID, model, RemoteBackend.FORMAT, model,
+                        0, 8192, Collections.singleton(Task.CHAT), Collections.emptySet(), "1"));
+                modelsChanged();
+            });
+            return "";
+        } catch (JSONException e) {
+            return "Could not read the remote settings.";
+        }
+    }
+
+    /** Remote endpoint status. Never includes the API key itself. */
+    @JavascriptInterface
+    public String remoteStatus() {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("baseUrl", remote.baseUrl == null ? "" : remote.baseUrl);
+            o.put("model", remote.model == null ? "" : remote.model);
+            o.put("hasKey", remote.apiKey != null && !remote.apiKey.isEmpty());
+            for (BackendInfo b : ai.backends()) {
+                if (b.getId().equals("remote") && b.getUnavailableReason() != null) o.put("unavailable", b.getUnavailableReason());
+            }
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        return o.toString();
+    }
+
     /** Registered models and their state, as a JSON array. */
     @JavascriptInterface
     public String listModels() {
         JSONArray out = new JSONArray();
-        Map<String, ModelState> states = ai.getModels().getStates().getValue();
-        for (ModelDescriptor m : ai.getModels().listBlocking()) {
-            ModelState state = states.get(m.getId());
+        for (ModelInfo info : ai.getModels().listBlocking()) {
+            ModelDescriptor m = info.getDescriptor();
+            ModelState state = info.getState();
             JSONObject o = new JSONObject();
             try {
                 o.put("id", m.getId());
@@ -184,7 +235,7 @@ final class StudioBridge {
         File[] files = modelsDir.listFiles((dir, n) -> n.toLowerCase(Locale.ROOT).endsWith(".gguf"));
         if (files == null) return;
         java.util.Set<String> known = new java.util.HashSet<>();
-        for (ModelDescriptor m : ai.getModels().listBlocking()) known.add(m.getId());
+        for (ModelInfo info : ai.getModels().listBlocking()) known.add(info.getDescriptor().getId());
         boolean added = false;
         for (File f : files) {
             ModelDescriptor d = descriptorFor(f);

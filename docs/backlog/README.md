@@ -12,7 +12,7 @@ Requirements: [../requirements.md](../requirements.md). Architecture and decisio
 | E3 — AI services | [E3-ai-services.md](E3-ai-services.md) | T2AI-020–025 |
 | E4 — AI orchestration core | [E4-orchestration.md](E4-orchestration.md) | T2AI-030–036 |
 | E5 — Developer SDK APIs | [E5-sdk-api.md](E5-sdk-api.md) | T2AI-040–044 |
-| E6 — Integration and release | [E6-integration-release.md](E6-integration-release.md) | T2AI-050–053 |
+| E6 — Integration and release | [E6-integration-release.md](E6-integration-release.md) | T2AI-050–054 |
 
 ## Milestones
 
@@ -23,7 +23,7 @@ Work milestones in order. Within a milestone, follow each story's **Depends on**
 | 1 | Contracts and Android foundation | T2AI-000, 001, 002, 004, 005 | `:sdk` module builds in CI; shared types, Android adapter, storage, resource signals |
 | 2 | First tokens | T2AI-010, 011, 020, 030, 031 | An instrumented test streams tokens from llama.cpp through controller → router → Model Manager → inference |
 | 3 | Android chat path | T2AI-021, 022, 032, 040, 041, 050 | Tune2AI Studio chats through the public SDK; simulated replies removed |
-| 4 | Backend coverage | T2AI-012, 014, 015, 044 | ONNX Runtime, optional Remote API, Model API |
+| 4 | Backend coverage | T2AI-012, 014, 015, 044, 054 | ONNX Runtime, optional Remote API (SDK + Studio settings), Model API |
 | 5 | Agents and tools | T2AI-033, 034, 042 | Bounded agent calls a registered tool |
 | 6 | Workflows | T2AI-035, 036, 043 | Workflows run, persist, and resume |
 | 7 | AI services | T2AI-023, 024, 025 | Embeddings, RAG, and memory feed context |

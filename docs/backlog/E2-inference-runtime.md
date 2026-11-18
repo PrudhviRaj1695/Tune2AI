@@ -47,7 +47,7 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 ### T2AI-012 — Integrate the ONNX Runtime backend
 
-- **Status:** Todo
+- **Status:** Blocked (ONNX Runtime GenAI is not on Maven Central; see open decision 3 in architecture.md)
 - **Milestone:** 4 · **Requirements:** FR-INF-3 · **Depends on:** T2AI-010
 
 **Story:** As an application developer, I want to run supported ONNX models through ONNX Runtime so that I can use this backend through the same SDK contract.
@@ -84,27 +84,27 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 ### T2AI-014 — Register and describe backends
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 4 · **Requirements:** FR-INF-4 · **Depends on:** T2AI-010
 
 **Story:** As a runtime maintainer, I want backends to register through a documented extension point so that new runtimes do not require public API changes.
 
 **Acceptance criteria**
 
-- Apps register backends at configuration time (`Tune2AI.Builder.addBackend(...)`); registration validates the backend's capabilities.
+- Apps register backends at configuration time (`Tune2AI.Builder.addBackend(...)`); registration validates the backend's id and capabilities. Backends report `unavailableReason` (for example, no API key); `Tune2AI.backends()` lists them.
 - The runtime lists available backends and explains why a requested backend is unavailable.
 - A backend integration guide covers lifecycle, errors, streaming, cancellation, and resource reporting.
 
 **Tasks**
 
-- [ ] T2AI-014.1 `inference/BackendRegistry.kt` with registration validation and an `unavailableReason` per backend id.
-- [ ] T2AI-014.2 Wire the registry into configuration (T2AI-040).
-- [ ] T2AI-014.3 `docs/backend-guide.md`: how to implement and test a backend with the contract suite.
-- [ ] T2AI-014.4 Tests: duplicate id rejected, invalid capabilities rejected, unavailable reason reported.
+- [x] T2AI-014.1 `inference/BackendRegistry.kt` with registration validation and an `unavailableReason` per backend id.
+- [x] T2AI-014.2 Wire the registry into configuration (T2AI-040).
+- [x] T2AI-014.3 `docs/backend-guide.md`: how to implement and test a backend with the contract suite.
+- [x] T2AI-014.4 Tests: duplicate id rejected, invalid capabilities rejected, unavailable reason reported.
 
 ### T2AI-015 — Integrate the optional Remote API backend
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 4 · **Requirements:** FR-INF-5, NFR-1, NFR-2 · **Depends on:** T2AI-010, T2AI-014
 
 **Story:** As an application developer, I want to route requests to a remote model API through the same inference abstraction so that remote and local execution share routing, context, tools, and events.
@@ -119,8 +119,8 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 **Tasks**
 
-- [ ] T2AI-015.1 Resolve open decision 3 in [architecture.md](../architecture.md): pick the first provider API format.
-- [ ] T2AI-015.2 Create `:sdk-remote` with `INTERNET` in its manifest.
-- [ ] T2AI-015.3 `SseReader.kt` over `HttpURLConnection` (D4).
-- [ ] T2AI-015.4 `RemoteBackend.kt`: request mapping, streaming, cancellation, HTTP status → error category.
-- [ ] T2AI-015.5 Tests: `SseReader` unit tests (split frames, comments, multi-line data); contract suite against a JVM mock HTTP server; assert credentials never appear in logged messages.
+- [x] T2AI-015.1 Decision D7 in [architecture.md](../architecture.md): OpenAI-compatible Chat Completions with SSE.
+- [x] T2AI-015.2 Create `:sdk-remote` with `INTERNET` in its manifest.
+- [x] T2AI-015.3 `SseReader.kt` (`sseData()`) over `HttpURLConnection` (D4). `load` checks the model is listed by `GET /models`; HTTP is refused except for local development hosts.
+- [x] T2AI-015.4 `RemoteBackend.kt`: request mapping, streaming, cancellation, HTTP status → error category.
+- [x] T2AI-015.5 Tests: `SseReader` unit tests (split frames, comments, multi-line data); contract suite against a JVM mock HTTP server (`MockApi`, JDK `HttpServer`); assert credentials never appear in logged messages.

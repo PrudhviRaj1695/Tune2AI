@@ -1,6 +1,7 @@
 package com.tune2ai.sdk
 
 import android.content.Context
+import com.tune2ai.sdk.api.BackendInfo
 import com.tune2ai.sdk.api.ChatApi
 import com.tune2ai.sdk.api.ModelsApi
 import com.tune2ai.sdk.api.ResourceLimits
@@ -9,6 +10,7 @@ import com.tune2ai.sdk.api.Tune2AIException
 import com.tune2ai.sdk.core.Platform
 import com.tune2ai.sdk.core.RequestController
 import com.tune2ai.sdk.core.Router
+import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
@@ -33,18 +35,21 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class Tune2AI private constructor(
     private val platform: Platform,
-    backends: List<InferenceBackend>,
+    private val backends: BackendRegistry,
     limits: ResourceLimits,
     prompts: PromptManager,
     defaultTemplate: String?,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    private val manager = ModelManager(backends, platform.storage, platform.resources, limits, scope)
+    private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
     private val ready = scope.async { manager.restore() }
     private val controller = RequestController(manager, Router(manager), ContextManager(prompts, defaultTemplate))
 
     val chat = ChatApi(controller, platform.storage, scope, ready)
-    val models = ModelsApi(manager, ready)
+    val models = ModelsApi(manager, scope, ready)
+
+    /** Registered backends and whether each can run right now. */
+    fun backends(): List<BackendInfo> = backends.describe()
 
     /** Latest device memory, battery, and thermal reading. */
     fun resources(): ResourceSnapshot = platform.resources.snapshot.value
@@ -61,15 +66,13 @@ class Tune2AI private constructor(
     class Builder private constructor(private val platform: () -> Platform) {
         constructor(context: Context) : this({ AndroidPlatform(context) })
 
-        private val backends = mutableListOf<InferenceBackend>()
+        private val backends = BackendRegistry()
         private val prompts = PromptManager()
         private var limits = ResourceLimits()
         private var defaultTemplate: String? = null
 
-        fun addBackend(backend: InferenceBackend) = apply {
-            require(backends.none { it.id == backend.id }) { "Backend '${backend.id}' is already registered" }
-            backends += backend
-        }
+        /** Registers a backend; fails fast on a duplicate id or missing capabilities. */
+        fun addBackend(backend: InferenceBackend) = apply { backends.register(backend) }
 
         fun resourceLimits(limits: ResourceLimits) = apply { this.limits = limits }
 
@@ -79,9 +82,9 @@ class Tune2AI private constructor(
         fun defaultPromptTemplate(id: String) = apply { defaultTemplate = id }
 
         fun build(): Tune2AI {
-            if (backends.isEmpty()) throw Tune2AIException.InvalidRequest("Add at least one inference backend with addBackend(...)")
+            if (backends.all.isEmpty()) throw Tune2AIException.InvalidRequest("Add at least one inference backend with addBackend(...)")
             defaultTemplate?.let { prompts.get(it) } // fails now if the default template was never registered
-            return Tune2AI(platform(), backends.toList(), limits, prompts, defaultTemplate)
+            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate)
         }
 
         internal companion object {

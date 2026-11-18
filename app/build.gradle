@@ -17,4 +17,5 @@ android {
 
 dependencies {
     implementation project(':sdk-llama')
+    implementation project(':sdk-remote')
 }

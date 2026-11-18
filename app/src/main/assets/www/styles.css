@@ -353,6 +353,13 @@ input[role="switch"]:disabled, .segmented input:disabled + span { opacity: .45; 
   color: var(--accent-text); font-size: 14px; font-weight: 600; transition: border-color .15s, background .15s;
 }
 .import-model:hover { border-color: var(--accent); background: var(--accent-soft); }
+.remote-form { display: grid; gap: 12px; margin-top: 14px; }
+.field { display: grid; gap: 4px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.field input {
+  min-height: 44px; padding: 0 12px; border: 1.5px solid var(--line); border-radius: 12px;
+  background: var(--surface); color: var(--ink); font: 15px var(--font);
+}
+.field input:focus { outline: none; border-color: var(--accent); }
 
 .prompt-card { padding: 14px; border-radius: 14px; background: var(--code-bg); color: var(--code-ink); }
 .prompt-card-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: #fff; font-size: 14px; }

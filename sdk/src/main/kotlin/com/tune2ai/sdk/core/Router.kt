@@ -19,6 +19,10 @@ data class Route(val model: ModelDescriptor, val backend: InferenceBackend)
 class Router(private val models: ModelManager) {
 
     fun route(task: Task, options: RequestOptions): Route {
+        options.backend?.let { id ->
+            val backend = models.backend(id) ?: throw NoCompatibleRoute("Backend '$id' is not registered")
+            backend.unavailableReason?.let { throw NoCompatibleRoute("Backend '$id' is unavailable: $it") }
+        }
         options.model?.let { return preferred(it, task, options.backend) }
 
         val candidates = models.candidates(task).filter { options.backend == null || it.backend.id == options.backend }

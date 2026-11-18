@@ -25,6 +25,26 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 - [x] T2AI-050.5 Show resource-limit and error events as toasts plus a failed trace state.
 - [x] T2AI-050.6 Manual test script in `app/README.md`. Verified on the emulator by driving the WebView over DevTools: chat, follow-up with history, cancel, trace.
 
+### T2AI-054 — Configure a remote endpoint in Studio
+
+- **Status:** Done
+- **Milestone:** 4 · **Requirements:** FR-INF-5, NFR-2 · **Depends on:** T2AI-015, T2AI-050
+
+**Story:** As a developer evaluating Tune2AI, I want to point Studio at a remote OpenAI-compatible endpoint so that I can compare remote and on-device runs on the same route.
+
+**Acceptance criteria**
+
+- Run setup → Remote shows fields for base URL, API key, and model name; Remote is enabled once they are filled.
+- The API key is kept in memory only and never written to disk or logs.
+- Remote runs show the same route, trace, and errors as on-device runs; an invalid key shows a clear failure.
+
+**Tasks**
+
+- [x] T2AI-054.1 Register `RemoteBackend` in `MainActivity` with an API-key supplier owned by `StudioBridge`; the base URL is a supplier too (`RemoteBackend({ url }, { key })`), so settings change without rebuilding the SDK.
+- [x] T2AI-054.2 Bridge methods to set endpoint, key, and model; register the remote model descriptor.
+- [x] T2AI-054.3 Run setup UI for the three fields; enable the Remote option.
+- [x] T2AI-054.4 Manual test against a local OpenAI-compatible server on the development machine via `10.0.2.2` (debug builds allow cleartext to it only): wrong key shows "rejected the API key (HTTP 401)"; right key streams the reply with the remote route in the trace.
+
 ### T2AI-051 — Provide an iOS sample
 
 - **Status:** Todo

@@ -11,6 +11,7 @@ import com.tune2ai.sdk.core.toTune2AIException
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.inference.LoadedModel
 import com.tune2ai.sdk.inference.canRun
+import com.tune2ai.sdk.inference.supports
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +96,8 @@ class ModelManager(
 
     fun backendsFor(model: ModelDescriptor, task: Task): List<InferenceBackend> = backends.filter { it.canRun(model, task) }
 
+    fun backend(id: String): InferenceBackend? = backends.firstOrNull { it.id == id }
+
     /** Usable (model, backend) pairs for [task]; unavailable and failed models are excluded. */
     fun candidates(task: Task): List<Candidate> = synchronized(lock) {
         catalog.values.flatMap { model ->
@@ -138,8 +141,11 @@ class ModelManager(
             if (synchronized(lock) { model.id in held }) {
                 throw Tune2AIException.ModelUnavailable("Model '${model.id}' is in use on another backend")
             }
-            limits.violation(resources.snapshot.value, model.memoryBytes)?.let {
-                throw Tune2AIException.ResourceLimit("Cannot load '${model.id}': $it")
+            if (!backend.capabilities.requiresNetwork) {
+                if (!fileExists(model.path)) throw Tune2AIException.ModelUnavailable("Model file not found: ${model.path}")
+                limits.violation(resources.snapshot.value, model.memoryBytes)?.let {
+                    throw Tune2AIException.ResourceLimit("Cannot load '${model.id}': $it")
+                }
             }
             synchronized(lock) { loading += model.id }
             publish()
@@ -212,11 +218,15 @@ class ModelManager(
         held[id]?.let { return ModelState.Loaded(it.backend.id) }
         if (id in loading) return ModelState.Loading
         failures[id]?.let { return ModelState.Failed(it) }
-        if (!fileExists(model.path)) return ModelState.Unavailable("Model file not found: ${model.path}")
-        if (backends.none { model.format in it.capabilities.formats }) {
-            return ModelState.Unavailable("No registered backend runs ${model.format} models")
+        val supporting = backends.filter { it.supports(model) }
+        if (supporting.isEmpty()) return ModelState.Unavailable("No registered backend runs ${model.format} models")
+        val usable = supporting.filter { it.unavailableReason == null }
+        if (usable.isEmpty()) return ModelState.Unavailable("${supporting.first().id}: ${supporting.first().unavailableReason}")
+        // Files and memory only matter when the model runs on this device.
+        if (usable.any { !it.capabilities.requiresNetwork }) {
+            if (!fileExists(model.path)) return ModelState.Unavailable("Model file not found: ${model.path}")
+            limits.violation(resources.snapshot.value, model.memoryBytes)?.let { return ModelState.Unavailable(it) }
         }
-        limits.violation(resources.snapshot.value, model.memoryBytes)?.let { return ModelState.Unavailable(it) }
         return ModelState.Unloaded
     }
 

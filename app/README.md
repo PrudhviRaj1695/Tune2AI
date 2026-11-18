@@ -16,6 +16,10 @@ Studio runs GGUF models with llama.cpp. Small instruct models work well for test
 
   Restart the app afterwards (`MSYS_NO_PATHCONV=1` is only needed in Git Bash on Windows).
 
+## Remote endpoints
+
+Run setup → **Remote** takes any OpenAI-compatible API (base URL ending in `/v1`, API key, model name). The key stays in memory and is forgotten when the app closes. Release builds require HTTPS; debug builds also allow `http://10.0.2.2` (your development machine, as seen from the emulator) for local servers.
+
 ## Manual test script
 
 | # | Do | Expect |
@@ -32,6 +36,7 @@ Studio runs GGUF models with llama.cpp. Small instruct models work well for test
 | 10 | Switch to Agent or Workflow | Replies are marked "Simulated" until those APIs ship |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
+| 13 | Run setup → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.
 

@@ -52,7 +52,7 @@ class RouterTest {
         assertTrue(assertThrows(NoCompatibleRoute::class.java) { router.route(Task.CHAT, RequestOptions(model = "huge")) }
             .message!!.contains("unavailable"))
         assertTrue(assertThrows(NoCompatibleRoute::class.java) { router.route(Task.CHAT, RequestOptions(model = "ok", backend = "remote")) }
-            .message!!.contains("Backend 'remote' cannot run 'ok'"))
+            .message!!.contains("Backend 'remote' is not registered"))
         assertTrue(assertThrows(NoCompatibleRoute::class.java) { router.route(Task.EMBEDDING, RequestOptions()) }
             .message!!.contains("does not support EMBEDDING"))
     }
