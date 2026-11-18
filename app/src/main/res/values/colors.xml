@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Keep in sync with the bg, surface and accent tokens in assets/www/styles.css -->
+<resources>
+    <color name="canvas">#F5F6FA</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="accent">#5B47F5</color>
+</resources>

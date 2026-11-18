@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The WebView reports prefers-color-scheme from this theme (light here, dark in values-night). -->
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#6657E8</item>
-        <item name="android:statusBarColor">#10192D</item>
-        <item name="android:navigationBarColor">#10192D</item>
-        <item name="android:windowLightStatusBar">false</item>
-        <item name="android:windowActionModeOverlay">true</item>
-        <item name="android:windowBackground">#F6F8FB</item>
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:statusBarColor">@color/canvas</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/canvas</item>
     </style>
 </resources>
