@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** `:app` is a Java WebView prototype with simulated replies. The SDK modules do not exist yet; they start with story T2AI-000.
+**Current state:** Milestone 1 is done: `:sdk` has the shared types, event contract, Android adapter, SQLite storage, and resource monitor, with JVM and instrumented tests and CI. `:app` is still the Java WebView prototype with simulated replies; real inference starts in milestone 2.
 
 ## Where things are
 
@@ -17,7 +17,8 @@ Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflo
 | [docs/backlog/](docs/backlog/README.md) | Epics, stories, tasks, milestones. **The source of truth for what to build next.** |
 | `app/` | Tune2AI Studio. Native shell: `MainActivity.java`. UI: `app/src/main/assets/www/` (the only copy of the web UI) |
 | `scripts/architecture_diagram.py` | Regenerates `docs/architecture.svg` |
-| `sdk/`, `sdk-llama/`, `sdk-onnx/`, `sdk-remote/` | Planned modules (decision D3) |
+| `sdk/` | The SDK (Kotlin). Packages: `api` (public types), `core`, `services`, `inference`, `platform/android`. Tests: `src/test` (JVM), `src/androidTest` (device), `src/sharedTest` (contracts run on both) |
+| `sdk-llama/`, `sdk-onnx/`, `sdk-remote/` | Planned backend modules (decision D3) |
 
 ## Build and test
 

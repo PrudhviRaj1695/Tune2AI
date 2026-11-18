@@ -1,5 +1,5 @@
 plugins {
-    id 'com.android.application'
+    alias(libs.plugins.android.application)
 }
 
 android {
@@ -13,4 +13,8 @@ android {
         versionCode 1
         versionName '1.0.0'
     }
+}
+
+dependencies {
+    implementation project(':sdk')
 }

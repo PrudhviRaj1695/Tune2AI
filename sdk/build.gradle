@@ -1,0 +1,59 @@
+plugins {
+    alias(libs.plugins.android.library)
+    alias(libs.plugins.kotlin.serialization)
+}
+
+android {
+    namespace 'com.tune2ai.sdk'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 26
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Contract tests run against both the JVM fakes (test) and the Android implementations (androidTest).
+    sourceSets {
+        test.kotlin.srcDir 'src/sharedTest/kotlin'
+        androidTest.kotlin.srcDir 'src/sharedTest/kotlin'
+    }
+}
+
+dependencies {
+    api libs.kotlinx.coroutines.core
+    implementation libs.kotlinx.coroutines.android
+    implementation libs.kotlinx.serialization.json
+
+    testImplementation libs.junit
+    testImplementation libs.kotlinx.coroutines.test
+    androidTestImplementation libs.junit
+    androidTestImplementation libs.kotlinx.coroutines.test
+    androidTestImplementation libs.androidx.test.runner
+    androidTestImplementation libs.androidx.test.ext.junit
+}
+
+// Decision D1: shared runtime packages stay free of android.* so they can move to Kotlin Multiplatform.
+def sharedPackageDirs = ['api', 'core', 'services', 'inference'].collect {
+    file("src/main/kotlin/com/tune2ai/sdk/$it")
+}
+def checkSharedPackages = tasks.register('checkSharedPackages') {
+    inputs.files(sharedPackageDirs).withPropertyName('sharedSources')
+    doLast {
+        def offenders = sharedPackageDirs.findAll { it.exists() }.collectMany { dir ->
+            def found = []
+            dir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+                if (f.text =~ /(?m)^import android\./) found << f
+            }
+            found
+        }
+        if (offenders) {
+            throw new GradleException("android.* imports are not allowed in shared SDK packages (decision D1):\n" + offenders.join('\n'))
+        }
+    }
+}
+tasks.named('preBuild') { dependsOn checkSharedPackages }
