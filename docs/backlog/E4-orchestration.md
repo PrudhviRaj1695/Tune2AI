@@ -4,7 +4,7 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 ### T2AI-030 — Implement the request controller
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 2 · **Requirements:** FR-ORC-1, NFR-6, NFR-7, NFR-12 · **Depends on:** T2AI-001, T2AI-031
 
 **Story:** As an SDK maintainer, I want one request controller to validate and coordinate SDK operations so that chat, agent, and workflow requests share lifecycle handling.
@@ -19,16 +19,16 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-030.1 `core/RequestController.kt`: `execute(request): Flow<Tune2AIEvent>` running on a background dispatcher.
-- [ ] T2AI-030.2 Validation rules and `invalid request` errors.
-- [ ] T2AI-030.3 Deadline via `withTimeout` mapped to the `timeout` category.
-- [ ] T2AI-030.4 Hook for context assembly (no-op until T2AI-022) and for engines (T2AI-034, T2AI-035).
-- [ ] T2AI-030.5 Tests (JVM, `FakeBackend`): happy path, validation failure, timeout, cancellation, backend failure; each ends in one terminal event.
-- [ ] T2AI-030.6 Measure controller overhead in a JVM micro-benchmark test and record it against NFR-4.
+- [x] T2AI-030.1 `core/RequestController.kt`: `execute(request): Flow<Tune2AIEvent>` running on a background dispatcher.
+- [x] T2AI-030.2 Validation rules and `invalid request` errors.
+- [x] T2AI-030.3 Deadline via `withTimeout` mapped to the `timeout` category.
+- [x] T2AI-030.4 Hook for context assembly: `ContextAssembler` (pass-through until T2AI-022). Engines (T2AI-034, T2AI-035) will call `chat` for model steps.
+- [x] T2AI-030.5 Tests (JVM, `FakeBackend`): happy path, validation failure, timeout, cancellation, backend failure; each ends in one terminal event.
+- [x] T2AI-030.6 Measure controller overhead in a JVM micro-benchmark test and record it against NFR-4. Measured p95 1.4 ms (budget 50 ms). Note: the terminal guard must run before `flowOn`, or a failure drops events already emitted (found and fixed by these tests).
 
 ### T2AI-031 — Implement model and task routing
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 2 · **Requirements:** FR-ORC-2 · **Depends on:** T2AI-020
 
 **Story:** As an application developer, I want requests routed to a compatible model and backend so that task requirements match available capabilities.
@@ -41,9 +41,9 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-031.1 `core/Router.kt`: `route(request): Route` (model id + backend id) using `ModelManager.candidatesFor`.
-- [ ] T2AI-031.2 Selection order: explicit preference → already loaded → smallest model meeting requirements.
-- [ ] T2AI-031.3 Tests: preference honoured, preference rejected with reason, loaded model preferred, no candidates.
+- [x] T2AI-031.1 `core/Router.kt`: `route(task, options): Route` (model + backend) using `ModelManager.candidates`.
+- [x] T2AI-031.2 Selection order: explicit preference → already loaded → smallest model meeting requirements.
+- [x] T2AI-031.3 Tests: preference honoured, preference rejected with reason, loaded model preferred, no candidates.
 
 ### T2AI-032 — Implement the chat path
 

@@ -4,7 +4,7 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 ### T2AI-010 — Define the inference abstraction
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 2 · **Requirements:** FR-INF-1 · **Depends on:** T2AI-001
 
 **Story:** As a runtime maintainer, I want a backend-neutral inference interface so that backends can be added without changing SDK APIs or orchestration logic.
@@ -18,14 +18,14 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 **Tasks**
 
-- [ ] T2AI-010.1 `inference/InferenceBackend.kt`, `BackendCapabilities.kt`, `LoadedModel.kt`, `GenerateRequest.kt` (prompt or messages, sampling params, stop sequences).
-- [ ] T2AI-010.2 `inference/FakeBackend.kt` in test fixtures: scripted tokens, configurable delay and failure.
-- [ ] T2AI-010.3 Contract test suite (`InferenceBackendContractTest`) that any backend can run: load/unload, stream, cancel within 500 ms (NFR-7), error mapping.
-- [ ] T2AI-010.4 Run the contract suite against `FakeBackend`.
+- [x] T2AI-010.1 `inference/InferenceBackend.kt` (`InferenceBackend`, `BackendCapabilities`, `LoadedModel`, `GenerateRequest` with chat messages and sampling params; `generate` streams `Flow<String>`). `ModelDescriptor`/`ChatMessage` live in `api/Models.kt`. Stop sequences dropped: backends stop at the model's end-of-generation token.
+- [x] T2AI-010.2 `FakeBackend` in `sdk/src/test`: scripted tokens, configurable delay and failure.
+- [x] T2AI-010.3 Contract test suite (`InferenceBackendContract` in `sdk/src/sharedTest`) that any backend can run: load/unload, stream, cancel within 500 ms (NFR-7), error mapping.
+- [x] T2AI-010.4 Run the contract suite against `FakeBackend`.
 
 ### T2AI-011 — Integrate the llama.cpp backend
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 2 · **Requirements:** FR-INF-2, NFR-9 · **Depends on:** T2AI-010
 
 **Story:** As an application developer, I want to run a GGUF model through llama.cpp so that Tune2AI provides local inference on Android.
@@ -38,12 +38,12 @@ Goal: one backend-neutral interface with llama.cpp first, then ONNX Runtime, the
 
 **Tasks**
 
-- [ ] T2AI-011.1 Create `:sdk-llama` (Android library, NDK, CMake). Add llama.cpp as a git submodule pinned to a release tag under `sdk-llama/src/main/cpp/llama.cpp`.
-- [ ] T2AI-011.2 `CMakeLists.txt` building llama.cpp + a thin JNI bridge for arm64-v8a and x86_64.
-- [ ] T2AI-011.3 JNI bridge (`llama_jni.cpp`): load model, create context, tokenize, decode loop with a cancel flag checked per token, free.
-- [ ] T2AI-011.4 `LlamaBackend.kt`: wraps the bridge on a dedicated single-thread dispatcher; emits tokens as a `Flow`.
-- [ ] T2AI-011.5 Pre-load check: refuse when file size × overhead factor exceeds available memory (NFR-8). Put the factor in one named constant with a `ponytail:` note.
-- [ ] T2AI-011.6 Tests: contract suite as an instrumented test with a small GGUF model pushed via `adb` (document the model and path in the test).
+- [x] T2AI-011.1 Create `:sdk-llama` (Android library, NDK, CMake). Add llama.cpp as a shallow git submodule pinned to release tag `b12522` under `sdk-llama/src/main/cpp/llama.cpp`.
+- [x] T2AI-011.2 `CMakeLists.txt` building llama.cpp + a thin JNI bridge for arm64-v8a and x86_64.
+- [x] T2AI-011.3 JNI bridge (`llama_jni.cpp`): load model, create context, chat template, tokenize, chunked prompt + decode loop on the new `llama_batch_ext`/`llama_process` API (`llama_decode` is deprecated at this tag), cancel flag checked per token and via llama.cpp's abort callback, UTF-8-safe streaming, free.
+- [x] T2AI-011.4 `LlamaBackend.kt`: wraps the bridge on a small dedicated dispatcher (`Dispatchers.IO.limitedParallelism(2)`), one generation per model at a time; emits text as a `Flow`.
+- [x] T2AI-011.5 Pre-load check: `LlamaBackend.estimateMemoryBytes` (file size + overhead, `ponytail:` note) feeds `ModelDescriptor.memoryBytes`; the Model Manager refuses loads that break `ResourceLimits` (NFR-8). The backend also rejects non-GGUF files before calling native code.
+- [x] T2AI-011.6 Tests: contract suite as an instrumented test with SmolLM2-135M-Instruct Q8_0 pushed via `adb` (documented in `TestModel.kt` and AGENTS.md), plus `FirstTokensTest` for the full route. Emulator result: "The capital of France is Paris.", ~47 tok/s.
 
 ### T2AI-012 — Integrate the ONNX Runtime backend
 

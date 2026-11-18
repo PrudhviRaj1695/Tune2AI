@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** Milestone 1 is done: `:sdk` has the shared types, event contract, Android adapter, SQLite storage, and resource monitor, with JVM and instrumented tests and CI. `:app` is still the Java WebView prototype with simulated replies; real inference starts in milestone 2.
+**Current state:** Milestones 1–2 are done: `:sdk` has the contracts, Android adapter, storage, resource monitor, Model Manager, router, and request controller; `:sdk-llama` runs GGUF models on device through llama.cpp. `:app` still shows simulated replies until milestone 3 (T2AI-050) connects it to the SDK.
 
 ## Where things are
 
@@ -18,7 +18,9 @@ Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflo
 | `app/` | Tune2AI Studio. Native shell: `MainActivity.java`. UI: `app/src/main/assets/www/` (the only copy of the web UI) |
 | `scripts/architecture_diagram.py` | Regenerates `docs/architecture.svg` |
 | `sdk/` | The SDK (Kotlin). Packages: `api` (public types), `core`, `services`, `inference`, `platform/android`. Tests: `src/test` (JVM), `src/androidTest` (device), `src/sharedTest` (contracts run on both) |
-| `sdk-llama/`, `sdk-onnx/`, `sdk-remote/` | Planned backend modules (decision D3) |
+| `sdk-llama/` | llama.cpp backend: Kotlin `LlamaBackend` + JNI bridge `src/main/cpp/llama_jni.cpp`. llama.cpp is a git submodule pinned to a release tag (clone with `--recurse-submodules`) |
+| `sdk-onnx/`, `sdk-remote/` | Planned backend modules (decision D3) |
+| `models/` | Local model files for testing (git-ignored) |
 
 ## Build and test
 
@@ -30,6 +32,16 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 ./gradlew test                          # JVM unit tests (once :sdk exists)
 ./gradlew connectedAndroidTest          # instrumented tests, needs a device/emulator
 ```
+
+llama.cpp device tests need a small model on the device (skipped otherwise):
+
+```sh
+mkdir -p models && curl -L -o models/SmolLM2-135M-Instruct-Q8_0.gguf   https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q8_0.gguf
+MSYS_NO_PATHCONV=1 adb push models/SmolLM2-135M-Instruct-Q8_0.gguf /data/local/tmp/tune2ai-test.gguf
+./gradlew :sdk-llama:connectedDebugAndroidTest
+```
+
+On Windows Git Bash, prefix `adb` commands that take device paths with `MSYS_NO_PATHCONV=1`; otherwise `/data/...` is rewritten to a Windows path. The first `:sdk-llama` build installs the NDK and CMake and compiles llama.cpp (about 7 minutes); later builds are incremental.
 
 Web UI preview without Android: `python -m http.server -d app/src/main/assets/www`.
 

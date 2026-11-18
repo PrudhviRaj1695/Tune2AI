@@ -4,7 +4,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 ### T2AI-020 — Manage model metadata and lifecycle
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 2 · **Requirements:** FR-SVC-1, FR-PLT-3, NFR-8 · **Depends on:** T2AI-005, T2AI-010
 
 **Story:** As an application developer, I want a Model Manager to register, inspect, load, unload, and select models so that model use is consistent across backends.
@@ -18,11 +18,11 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-020.1 `services/model/ModelDescriptor.kt`, `ModelState.kt` (`Unloaded`, `Loading`, `Loaded`, `Failed(reason)`, `Unavailable(reason)`).
-- [ ] T2AI-020.2 `services/model/ModelManager.kt`: registry, `candidatesFor(requirements)`, `ensureLoaded(id)`, `unload(id)`; load serialized per model with a `Mutex`.
-- [ ] T2AI-020.3 Subscribe to `ResourceMonitor`; unload idle models on low-memory (`onTrimMemory`) and mark oversized models unavailable.
-- [ ] T2AI-020.4 Persist descriptors through `Storage` (namespace `models`).
-- [ ] T2AI-020.5 Tests (JVM, `FakeBackend` + fake monitor): concurrent `ensureLoaded` loads once; low memory unloads; incompatible model never returned as a candidate.
+- [x] T2AI-020.1 `api/Models.kt`: `ModelDescriptor`, `ModelState` (`Unloaded`, `Loading`, `Loaded`, `Failed(reason)`, `Unavailable(reason)`).
+- [x] T2AI-020.2 `services/model/ModelManager.kt`: registry, `candidates(task)`, `acquire(model, backend)` returning a `Lease`, `unload(id)`, `trim()`; load serialized per model with a `Mutex`.
+- [x] T2AI-020.3 Subscribe to `ResourceMonitor`; unload idle models on low-memory (`onTrimMemory`) and mark oversized models unavailable.
+- [x] T2AI-020.4 Persist descriptors through `Storage` (namespace `models`).
+- [x] T2AI-020.5 Tests (JVM, `FakeBackend` + fake monitor): concurrent `ensureLoaded` loads once; low memory unloads; incompatible model never returned as a candidate.
 
 ### T2AI-021 — Manage prompt templates
 

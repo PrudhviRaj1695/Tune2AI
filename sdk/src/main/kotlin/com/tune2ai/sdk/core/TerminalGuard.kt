@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.transformWhile
  * - An upstream cancellation (not caused by the collector) becomes [Tune2AIEvent.Cancelled].
  * - An upstream that completes without a terminal event gets a [Tune2AIEvent.Failed].
  * - When the collector itself is cancelled nothing more is emitted; there is no one to receive it.
+ *
+ * Apply it before `flowOn` or `buffer`: an exception that crosses those operators cancels their
+ * buffer, and events emitted just before the failure would be lost.
  */
 fun Flow<Tune2AIEvent>.withTerminalGuarantee(requestId: RequestId): Flow<Tune2AIEvent> = flow {
     var finished = false
