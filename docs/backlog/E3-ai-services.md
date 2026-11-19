@@ -107,7 +107,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 ### T2AI-025 — Implement the memory engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 7 · **Requirements:** FR-SVC-6 · **Depends on:** T2AI-004, T2AI-022
 
 **Story:** As an application developer, I want memory operations to persist and retrieve selected information so that relevant state carries across requests.
@@ -121,7 +121,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-025.1 `services/memory/MemoryEngine.kt` on `Storage` (namespace per session).
-- [ ] T2AI-025.2 Search by embedding when available, else keyword match.
-- [ ] T2AI-025.3 `MemoryContextSource` registered with the Context Manager; respects the disabled flag.
-- [ ] T2AI-025.4 Tests: session isolation, clear, disabled memory contributes nothing.
+- [x] T2AI-025.1 `services/memory/MemoryEngine.kt` on `Storage` (namespace per session).
+- [x] T2AI-025.2 Search by embedding when available, else keyword match.
+- [x] T2AI-025.3 `MemoryContextSource` registered with the Context Manager; respects the disabled flag.
+- [x] T2AI-025.4 Tests: session isolation, clear, disabled memory contributes nothing.

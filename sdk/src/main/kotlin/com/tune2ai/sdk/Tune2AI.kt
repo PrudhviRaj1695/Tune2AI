@@ -20,6 +20,8 @@ import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
+import com.tune2ai.sdk.services.memory.MemoryContextSource
+import com.tune2ai.sdk.services.memory.MemoryEngine
 import com.tune2ai.sdk.services.model.ModelManager
 import com.tune2ai.sdk.services.prompt.PromptManager
 import com.tune2ai.sdk.services.prompt.PromptTemplate
@@ -50,7 +52,17 @@ class Tune2AI private constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
     private val ready = scope.async { manager.restore() }
-    private val controller = RequestController(manager, Router(manager), ContextManager(prompts, defaultTemplate))
+
+    /**
+     * Per-session memory the host writes to and can disable, inspect, and clear (FR-SVC-6). The default
+     * session feeds requests through the Context Manager.
+     * ponytail: one default memory session wired to context; route per request when multi-session memory lands.
+     */
+    val memory = MemoryEngine(platform.storage)
+    private val controller = RequestController(
+        manager, Router(manager),
+        ContextManager(prompts, defaultTemplate, listOf(MemoryContextSource(memory, DEFAULT_SESSION))),
+    )
 
     private val toolEngine = ToolCallingEngine(tools)
 
@@ -110,5 +122,6 @@ class Tune2AI private constructor(
 
     private companion object {
         const val CLOSE_TIMEOUT_MILLIS = 2_000L
+        const val DEFAULT_SESSION = "default"
     }
 }
