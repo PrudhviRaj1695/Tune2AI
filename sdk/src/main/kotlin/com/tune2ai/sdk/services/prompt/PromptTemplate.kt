@@ -36,7 +36,7 @@ data class PromptTemplate @JvmOverloads constructor(
 }
 
 /** Registry of prompt templates. The latest version of an id is used unless a request pins one. */
-class PromptManager {
+internal class PromptManager {
     private val templates = HashMap<String, java.util.TreeMap<Int, PromptTemplate>>()
 
     fun register(template: PromptTemplate) = synchronized(templates) {

@@ -32,6 +32,9 @@ export JAVA_HOME="/c/Program Files/Android/Android Studio/jbr"
 ./gradlew :app:assembleDebug            # Studio APK -> app/build/outputs/apk/debug/
 ./gradlew test                          # JVM unit tests (once :sdk exists)
 ./gradlew connectedAndroidTest          # instrumented tests, needs a device/emulator
+./gradlew apiCheck :sdk:checkAarSize     # public API dump and the 1 MB :sdk size budget (run ./gradlew apiDump after an intended API change)
+./gradlew :dokkaGenerate                # API reference -> build/dokka/html
+./gradlew publishAllPublicationsToLocalRepository  # dry-run Maven publish -> build/repo
 ```
 
 llama.cpp device tests need a small model on the device (skipped otherwise):
@@ -63,7 +66,7 @@ Follow [docs/architecture.md](docs/architecture.md). The rules agents most often
 ## Conventions
 
 - SDK: Kotlin, coroutines `Flow` for streaming, kotlinx-serialization for JSON. `:app` stays Java until there is a reason to change.
-- Public API changes are deliberate: keep internals `internal`; once the API dump exists (T2AI-040), update it in the same change.
+- Public API changes are deliberate: keep internals `internal`, and run `./gradlew apiDump` in the same change (`apiCheck` fails CI on drift). Docs examples live in `sdk/src/docsTest`; a `kotlin` block in `docs/` must match them verbatim (`DocsSnippetsTest`).
 - Don't add a dependency unless the story or a decision in architecture.md calls for it. If you need one, add a decision row first.
 - Deliberate shortcuts with a known ceiling get a `ponytail:` comment naming the ceiling and the upgrade path.
 - Tests: JVM tests with `FakeBackend`/`FakePlatform` for everything above the platform layer; instrumented tests only for Android and native code.

@@ -60,7 +60,7 @@ data class Transition(
  * is checked against it so a changed definition is refused. [nextStepId] is null once the run completed.
  */
 @Serializable
-data class WorkflowCheckpoint(
+internal data class WorkflowCheckpoint(
     val runId: String,
     val definitionId: String,
     val definitionVersion: Int,

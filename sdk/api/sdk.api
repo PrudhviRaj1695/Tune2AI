@@ -1,0 +1,1032 @@
+public final class com/tune2ai/sdk/R {
+}
+
+public final class com/tune2ai/sdk/Tune2AI : java/lang/AutoCloseable {
+	public static final field CLOSE_TIMEOUT_MILLIS J
+	public static final field DEFAULT_SESSION Ljava/lang/String;
+	public synthetic fun <init> (Lcom/tune2ai/sdk/core/Platform;Lcom/tune2ai/sdk/inference/BackendRegistry;Lcom/tune2ai/sdk/api/ResourceLimits;Lcom/tune2ai/sdk/services/prompt/PromptManager;Ljava/lang/String;Ljava/util/List;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun backends ()Ljava/util/List;
+	public fun close ()V
+	public final fun getAgent ()Lcom/tune2ai/sdk/api/AgentApi;
+	public final fun getChat ()Lcom/tune2ai/sdk/api/ChatApi;
+	public final fun getEmbeddings ()Lcom/tune2ai/sdk/services/embedding/EmbeddingService;
+	public final fun getMemory ()Lcom/tune2ai/sdk/services/memory/MemoryEngine;
+	public final fun getModels ()Lcom/tune2ai/sdk/api/ModelsApi;
+	public final fun getRag ()Lcom/tune2ai/sdk/services/rag/RagEngine;
+	public final fun getWorkflow ()Lcom/tune2ai/sdk/api/WorkflowApi;
+	public final fun resources ()Lcom/tune2ai/sdk/api/ResourceSnapshot;
+}
+
+public final class com/tune2ai/sdk/Tune2AI$Builder {
+	public fun <init> (Landroid/content/Context;)V
+	public synthetic fun <init> (Lkotlin/jvm/functions/Function0;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun addBackend (Lcom/tune2ai/sdk/inference/InferenceBackend;)Lcom/tune2ai/sdk/Tune2AI$Builder;
+	public final fun addPromptTemplate (Lcom/tune2ai/sdk/services/prompt/PromptTemplate;)Lcom/tune2ai/sdk/Tune2AI$Builder;
+	public final fun addTool (Lcom/tune2ai/sdk/api/Tool;)Lcom/tune2ai/sdk/Tune2AI$Builder;
+	public final fun build ()Lcom/tune2ai/sdk/Tune2AI;
+	public final fun defaultPromptTemplate (Ljava/lang/String;)Lcom/tune2ai/sdk/Tune2AI$Builder;
+	public final fun resourceLimits (Lcom/tune2ai/sdk/api/ResourceLimits;)Lcom/tune2ai/sdk/Tune2AI$Builder;
+}
+
+public final class com/tune2ai/sdk/api/AgentApi {
+	public final fun run (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
+	public final fun run (Ljava/lang/String;Ljava/util/Set;)Lkotlinx/coroutines/flow/Flow;
+	public final fun run (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;)Lkotlinx/coroutines/flow/Flow;
+	public final fun run (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public final fun run (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun run$default (Lcom/tune2ai/sdk/api/AgentApi;Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun stream (Ljava/lang/String;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public static synthetic fun stream$default (Lcom/tune2ai/sdk/api/AgentApi;Ljava/lang/String;Ljava/util/Set;Lcom/tune2ai/sdk/api/AgentLimits;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Cancellable;
+}
+
+public final class com/tune2ai/sdk/api/AgentLimits {
+	public fun <init> ()V
+	public fun <init> (I)V
+	public fun <init> (II)V
+	public synthetic fun <init> (IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()I
+	public final fun component2 ()I
+	public final fun copy (II)Lcom/tune2ai/sdk/api/AgentLimits;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/AgentLimits;IIILjava/lang/Object;)Lcom/tune2ai/sdk/api/AgentLimits;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMaxSteps ()I
+	public final fun getMaxToolCalls ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/BackendInfo {
+	public fun <init> (Ljava/lang/String;Ljava/util/Set;Ljava/util/Set;ZLjava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/util/Set;
+	public final fun component3 ()Ljava/util/Set;
+	public final fun component4 ()Z
+	public final fun component5 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/util/Set;Ljava/util/Set;ZLjava/lang/String;)Lcom/tune2ai/sdk/api/BackendInfo;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/BackendInfo;Ljava/lang/String;Ljava/util/Set;Ljava/util/Set;ZLjava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/BackendInfo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFormats ()Ljava/util/Set;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getRequiresNetwork ()Z
+	public final fun getTasks ()Ljava/util/Set;
+	public final fun getUnavailableReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/api/Cancellable {
+	public abstract fun cancel ()V
+}
+
+public final class com/tune2ai/sdk/api/ChatApi {
+	public final fun send (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/util/List;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/util/List;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/util/List;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun send$default (Lcom/tune2ai/sdk/api/ChatApi;Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun send$default (Lcom/tune2ai/sdk/api/ChatApi;Ljava/util/List;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun session (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatSession;
+	public final fun stream (Ljava/lang/String;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public static synthetic fun stream$default (Lcom/tune2ai/sdk/api/ChatApi;Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Cancellable;
+}
+
+public final class com/tune2ai/sdk/api/ChatMessage {
+	public static final field Companion Lcom/tune2ai/sdk/api/ChatMessage$Companion;
+	public fun <init> (Lcom/tune2ai/sdk/api/Role;Ljava/lang/String;)V
+	public static final fun assistant (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public final fun component1 ()Lcom/tune2ai/sdk/api/Role;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/tune2ai/sdk/api/Role;Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ChatMessage;Lcom/tune2ai/sdk/api/Role;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getContent ()Ljava/lang/String;
+	public final fun getRole ()Lcom/tune2ai/sdk/api/Role;
+	public fun hashCode ()I
+	public static final fun system (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public fun toString ()Ljava/lang/String;
+	public static final fun user (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+}
+
+public final synthetic class com/tune2ai/sdk/api/ChatMessage$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/api/ChatMessage$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/api/ChatMessage;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/api/ChatMessage$Companion {
+	public final fun assistant (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+	public final fun system (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+	public final fun user (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ChatMessage;
+}
+
+public final class com/tune2ai/sdk/api/ChatSession {
+	public static final field KEY Ljava/lang/String;
+	public final fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun clearAsync ()V
+	public final fun getId ()Ljava/lang/String;
+	public final fun history (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun send (Ljava/lang/String;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public final fun send (Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun send$default (Lcom/tune2ai/sdk/api/ChatSession;Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun stream (Ljava/lang/String;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public static synthetic fun stream$default (Lcom/tune2ai/sdk/api/ChatSession;Ljava/lang/String;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Cancellable;
+}
+
+public final class com/tune2ai/sdk/api/ErrorCategory : java/lang/Enum {
+	public static final field BACKEND_FAILURE Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field INVALID_REQUEST Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field LIMIT_REACHED Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field MODEL_UNAVAILABLE Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field NO_COMPATIBLE_ROUTE Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field RESOURCE_LIMIT Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field STORAGE_FAILURE Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field TIMEOUT Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static final field TOOL_FAILURE Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ErrorCategory;
+	public static fun values ()[Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public abstract interface class com/tune2ai/sdk/api/EventListener {
+	public abstract fun onEvent (Lcom/tune2ai/sdk/api/Tune2AIEvent;)V
+}
+
+public final class com/tune2ai/sdk/api/ModelDescriptor {
+	public static final field Companion Lcom/tune2ai/sdk/api/ModelDescriptor$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/util/Set;Ljava/util/Set;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/util/Set;Ljava/util/Set;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()J
+	public final fun component6 ()I
+	public final fun component7 ()Ljava/util/Set;
+	public final fun component8 ()Ljava/util/Set;
+	public final fun component9 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/util/Set;Ljava/util/Set;Ljava/lang/String;)Lcom/tune2ai/sdk/api/ModelDescriptor;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ModelDescriptor;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JILjava/util/Set;Ljava/util/Set;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ModelDescriptor;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackends ()Ljava/util/Set;
+	public final fun getContextLength ()I
+	public final fun getFormat ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getMemoryBytes ()J
+	public final fun getName ()Ljava/lang/String;
+	public final fun getPath ()Ljava/lang/String;
+	public final fun getTasks ()Ljava/util/Set;
+	public final fun getVersion ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/tune2ai/sdk/api/ModelDescriptor$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/api/ModelDescriptor$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/api/ModelDescriptor;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/api/ModelDescriptor;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/api/ModelDescriptor$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/api/ModelInfo {
+	public fun <init> (Lcom/tune2ai/sdk/api/ModelDescriptor;Lcom/tune2ai/sdk/api/ModelState;Ljava/util/List;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/ModelDescriptor;
+	public final fun component2 ()Lcom/tune2ai/sdk/api/ModelState;
+	public final fun component3 ()Ljava/util/List;
+	public final fun copy (Lcom/tune2ai/sdk/api/ModelDescriptor;Lcom/tune2ai/sdk/api/ModelState;Ljava/util/List;)Lcom/tune2ai/sdk/api/ModelInfo;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ModelInfo;Lcom/tune2ai/sdk/api/ModelDescriptor;Lcom/tune2ai/sdk/api/ModelState;Ljava/util/List;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ModelInfo;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackends ()Ljava/util/List;
+	public final fun getDescriptor ()Lcom/tune2ai/sdk/api/ModelDescriptor;
+	public final fun getState ()Lcom/tune2ai/sdk/api/ModelState;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/api/ModelState {
+}
+
+public final class com/tune2ai/sdk/api/ModelState$Failed : com/tune2ai/sdk/api/ModelState {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ModelState$Failed;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ModelState$Failed;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ModelState$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ModelState$Loaded : com/tune2ai/sdk/api/ModelState {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ModelState$Loaded;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ModelState$Loaded;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ModelState$Loaded;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackendId ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ModelState$Loading : com/tune2ai/sdk/api/ModelState {
+	public static final field INSTANCE Lcom/tune2ai/sdk/api/ModelState$Loading;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ModelState$Unavailable : com/tune2ai/sdk/api/ModelState {
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ModelState$Unavailable;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ModelState$Unavailable;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ModelState$Unavailable;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getReason ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ModelState$Unloaded : com/tune2ai/sdk/api/ModelState {
+	public static final field INSTANCE Lcom/tune2ai/sdk/api/ModelState$Unloaded;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ModelsApi {
+	public final fun getStates ()Lkotlinx/coroutines/flow/StateFlow;
+	public final fun list (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun listBlocking ()Ljava/util/List;
+	public final fun load (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun loadBlocking (Ljava/lang/String;)V
+	public final fun register (Lcom/tune2ai/sdk/api/ModelDescriptor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun registerBlocking (Lcom/tune2ai/sdk/api/ModelDescriptor;)V
+	public final fun remove (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun state (Ljava/lang/String;)Lkotlinx/coroutines/flow/StateFlow;
+	public final fun unload (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/api/RequestId {
+	public static final field Companion Lcom/tune2ai/sdk/api/RequestId$Companion;
+	public fun <init> (Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;)Lcom/tune2ai/sdk/api/RequestId;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/RequestId;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getValue ()Ljava/lang/String;
+	public fun hashCode ()I
+	public static final fun random ()Lcom/tune2ai/sdk/api/RequestId;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/RequestId$Companion {
+	public final fun random ()Lcom/tune2ai/sdk/api/RequestId;
+}
+
+public final class com/tune2ai/sdk/api/RequestOptions {
+	public fun <init> ()V
+	public fun <init> (Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;J)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JI)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JIF)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;Ljava/lang/String;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;Ljava/lang/String;Ljava/util/Map;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;Ljava/lang/String;Ljava/util/Map;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun component4 ()I
+	public final fun component5 ()F
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/lang/String;
+	public final fun component8 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;Ljava/lang/String;Ljava/util/Map;)Lcom/tune2ai/sdk/api/RequestOptions;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/RequestOptions;Ljava/lang/String;Ljava/lang/String;JIFLjava/lang/String;Ljava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/RequestOptions;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getBackend ()Ljava/lang/String;
+	public final fun getDeadlineMillis ()J
+	public final fun getMaxTokens ()I
+	public final fun getModel ()Ljava/lang/String;
+	public final fun getPromptTemplate ()Ljava/lang/String;
+	public final fun getPromptVariables ()Ljava/util/Map;
+	public final fun getSystem ()Ljava/lang/String;
+	public final fun getTemperature ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ResourceLimits {
+	public static final field MB J
+	public fun <init> ()V
+	public fun <init> (JLcom/tune2ai/sdk/api/ThermalState;Ljava/lang/Integer;)V
+	public synthetic fun <init> (JLcom/tune2ai/sdk/api/ThermalState;Ljava/lang/Integer;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()J
+	public final fun component2 ()Lcom/tune2ai/sdk/api/ThermalState;
+	public final fun component3 ()Ljava/lang/Integer;
+	public final fun copy (JLcom/tune2ai/sdk/api/ThermalState;Ljava/lang/Integer;)Lcom/tune2ai/sdk/api/ResourceLimits;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ResourceLimits;JLcom/tune2ai/sdk/api/ThermalState;Ljava/lang/Integer;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ResourceLimits;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMinBatteryPercent ()Ljava/lang/Integer;
+	public final fun getMinFreeMemoryBytes ()J
+	public final fun getStopAtThermal ()Lcom/tune2ai/sdk/api/ThermalState;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+	public final fun violation (Lcom/tune2ai/sdk/api/ResourceSnapshot;J)Ljava/lang/String;
+	public static synthetic fun violation$default (Lcom/tune2ai/sdk/api/ResourceLimits;Lcom/tune2ai/sdk/api/ResourceSnapshot;JILjava/lang/Object;)Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/ResourceSnapshot {
+	public fun <init> (JJZLjava/lang/Integer;Ljava/lang/Boolean;Lcom/tune2ai/sdk/api/ThermalState;)V
+	public final fun component1 ()J
+	public final fun component2 ()J
+	public final fun component3 ()Z
+	public final fun component4 ()Ljava/lang/Integer;
+	public final fun component5 ()Ljava/lang/Boolean;
+	public final fun component6 ()Lcom/tune2ai/sdk/api/ThermalState;
+	public final fun copy (JJZLjava/lang/Integer;Ljava/lang/Boolean;Lcom/tune2ai/sdk/api/ThermalState;)Lcom/tune2ai/sdk/api/ResourceSnapshot;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/ResourceSnapshot;JJZLjava/lang/Integer;Ljava/lang/Boolean;Lcom/tune2ai/sdk/api/ThermalState;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/ResourceSnapshot;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getAvailableMemoryBytes ()J
+	public final fun getBatteryPercent ()Ljava/lang/Integer;
+	public final fun getCharging ()Ljava/lang/Boolean;
+	public final fun getLowMemory ()Z
+	public final fun getThermal ()Lcom/tune2ai/sdk/api/ThermalState;
+	public final fun getTotalMemoryBytes ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Role : java/lang/Enum {
+	public static final field ASSISTANT Lcom/tune2ai/sdk/api/Role;
+	public static final field Companion Lcom/tune2ai/sdk/api/Role$Companion;
+	public static final field SYSTEM Lcom/tune2ai/sdk/api/Role;
+	public static final field USER Lcom/tune2ai/sdk/api/Role;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/api/Role;
+	public static fun values ()[Lcom/tune2ai/sdk/api/Role;
+}
+
+public final class com/tune2ai/sdk/api/Role$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/api/Task : java/lang/Enum {
+	public static final field CHAT Lcom/tune2ai/sdk/api/Task;
+	public static final field Companion Lcom/tune2ai/sdk/api/Task$Companion;
+	public static final field EMBEDDING Lcom/tune2ai/sdk/api/Task;
+	public static final field TOOL_CALLING Lcom/tune2ai/sdk/api/Task;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/api/Task;
+	public static fun values ()[Lcom/tune2ai/sdk/api/Task;
+}
+
+public final class com/tune2ai/sdk/api/Task$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/api/ThermalState : java/lang/Enum {
+	public static final field CRITICAL Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field EMERGENCY Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field LIGHT Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field MODERATE Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field NONE Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field SEVERE Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field SHUTDOWN Lcom/tune2ai/sdk/api/ThermalState;
+	public static final field UNKNOWN Lcom/tune2ai/sdk/api/ThermalState;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/api/ThermalState;
+	public static fun values ()[Lcom/tune2ai/sdk/api/ThermalState;
+}
+
+public final class com/tune2ai/sdk/api/Tool {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Lcom/tune2ai/sdk/api/ToolHandler;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/tune2ai/sdk/api/ToolHandler;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JLcom/tune2ai/sdk/api/ToolHandler;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lcom/tune2ai/sdk/api/ToolHandler;)V
+	public final fun getDescription ()Ljava/lang/String;
+	public final fun getHandler ()Lcom/tune2ai/sdk/api/ToolHandler;
+	public final fun getName ()Ljava/lang/String;
+	public final fun getParametersSchema ()Ljava/lang/String;
+	public final fun getTimeoutMillis ()J
+}
+
+public abstract interface class com/tune2ai/sdk/api/ToolHandler {
+	public abstract fun call (Ljava/lang/String;)Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/api/Tune2AIEvent {
+	public abstract fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$Cancelled : com/tune2ai/sdk/api/Tune2AIEvent$Terminal {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Cancelled;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$Cancelled;Lcom/tune2ai/sdk/api/RequestId;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Cancelled;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$Completed : com/tune2ai/sdk/api/Tune2AIEvent$Terminal {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Usage;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Lcom/tune2ai/sdk/api/Usage;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Usage;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Completed;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$Completed;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Usage;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Completed;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun getUsage ()Lcom/tune2ai/sdk/api/Usage;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$Failed : com/tune2ai/sdk/api/Tune2AIEvent$Terminal {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIException;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Lcom/tune2ai/sdk/api/Tune2AIException;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIException;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Failed;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$Failed;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIException;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Failed;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getError ()Lcom/tune2ai/sdk/api/Tune2AIException;
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$Progress : com/tune2ai/sdk/api/Tune2AIEvent {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;Ljava/lang/String;Ljava/util/List;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Progress;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$Progress;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Progress;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getDetail ()Ljava/lang/String;
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun getSources ()Ljava/util/List;
+	public final fun getStage ()Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$Stage : java/lang/Enum {
+	public static final field CONTEXT_ASSEMBLED Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static final field GENERATING Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static final field RECEIVED Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static final field ROUTED Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static final field VALIDATED Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+	public static fun values ()[Lcom/tune2ai/sdk/api/Tune2AIEvent$Stage;
+}
+
+public abstract interface class com/tune2ai/sdk/api/Tune2AIEvent$Terminal : com/tune2ai/sdk/api/Tune2AIEvent {
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$TextDelta : com/tune2ai/sdk/api/Tune2AIEvent {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;)Lcom/tune2ai/sdk/api/Tune2AIEvent$TextDelta;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$TextDelta;Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$TextDelta;
+	public fun equals (Ljava/lang/Object;)Z
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$ToolCall : com/tune2ai/sdk/api/Tune2AIEvent {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolCall;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolCall;Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolCall;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArgumentsJson ()Ljava/lang/String;
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIEvent$ToolResult : com/tune2ai/sdk/api/Tune2AIEvent {
+	public fun <init> (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V
+	public final fun component1 ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Z
+	public final fun copy (Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolResult;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolResult;Lcom/tune2ai/sdk/api/RequestId;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ZILjava/lang/Object;)Lcom/tune2ai/sdk/api/Tune2AIEvent$ToolResult;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCallId ()Ljava/lang/String;
+	public final fun getName ()Ljava/lang/String;
+	public fun getRequestId ()Lcom/tune2ai/sdk/api/RequestId;
+	public final fun getResultJson ()Ljava/lang/String;
+	public fun hashCode ()I
+	public final fun isError ()Z
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract class com/tune2ai/sdk/api/Tune2AIException : java/lang/Exception {
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;Lkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public abstract fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$BackendFailure : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$InvalidRequest : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$LimitReached : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$ModelUnavailable : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$NoCompatibleRoute : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$ResourceLimit : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$StorageFailure : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$Timeout : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Tune2AIException$ToolFailure : com/tune2ai/sdk/api/Tune2AIException {
+	public fun <init> (Ljava/lang/String;Ljava/lang/Throwable;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/Throwable;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun getCategory ()Lcom/tune2ai/sdk/api/ErrorCategory;
+}
+
+public final class com/tune2ai/sdk/api/Usage {
+	public fun <init> (ILjava/lang/Long;J)V
+	public final fun component1 ()I
+	public final fun component2 ()Ljava/lang/Long;
+	public final fun component3 ()J
+	public final fun copy (ILjava/lang/Long;J)Lcom/tune2ai/sdk/api/Usage;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/Usage;ILjava/lang/Long;JILjava/lang/Object;)Lcom/tune2ai/sdk/api/Usage;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFirstTokenMillis ()Ljava/lang/Long;
+	public final fun getOutputTokens ()I
+	public final fun getTotalMillis ()J
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/VersionKt {
+	public static final field SDK_VERSION Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/api/WorkflowApi {
+	public final fun cancel (Ljava/lang/String;)Z
+	public final fun delete (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun list (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun resume (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Lcom/tune2ai/sdk/api/RequestId;)Lkotlinx/coroutines/flow/Flow;
+	public final fun resume (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun resume$default (Lcom/tune2ai/sdk/api/WorkflowApi;Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/RequestOptions;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun start (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;)Lkotlinx/coroutines/flow/Flow;
+	public final fun start (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;)Lkotlinx/coroutines/flow/Flow;
+	public final fun start (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;)Lkotlinx/coroutines/flow/Flow;
+	public final fun start (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;)Lkotlinx/coroutines/flow/Flow;
+	public static synthetic fun start$default (Lcom/tune2ai/sdk/api/WorkflowApi;Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;ILjava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+	public final fun status (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun stream (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun stream (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/EventListener;)Lcom/tune2ai/sdk/api/Cancellable;
+	public static synthetic fun stream$default (Lcom/tune2ai/sdk/api/WorkflowApi;Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/util/Map;Lcom/tune2ai/sdk/api/RequestOptions;Lcom/tune2ai/sdk/api/RequestId;Lcom/tune2ai/sdk/api/EventListener;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/Cancellable;
+	public final fun validate (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;)Ljava/util/List;
+}
+
+public final class com/tune2ai/sdk/api/WorkflowRunStatus {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;IZLjava/lang/String;Ljava/util/Map;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()I
+	public final fun component4 ()Z
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/util/Map;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;IZLjava/lang/String;Ljava/util/Map;)Lcom/tune2ai/sdk/api/WorkflowRunStatus;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/api/WorkflowRunStatus;Ljava/lang/String;Ljava/lang/String;IZLjava/lang/String;Ljava/util/Map;ILjava/lang/Object;)Lcom/tune2ai/sdk/api/WorkflowRunStatus;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCanResume ()Z
+	public final fun getCompleted ()Z
+	public final fun getDefinitionId ()Ljava/lang/String;
+	public final fun getDefinitionVersion ()I
+	public final fun getNextStepId ()Ljava/lang/String;
+	public final fun getRunId ()Ljava/lang/String;
+	public final fun getVariables ()Ljava/util/Map;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/core/InMemoryStorage : com/tune2ai/sdk/core/Storage {
+	public fun <init> ()V
+	public fun clear (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun delete (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun get (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun list (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun put (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class com/tune2ai/sdk/core/Storage {
+	public abstract fun clear (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun delete (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun get (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun list (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun put (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/core/workflow/StepType : java/lang/Enum {
+	public static final field Companion Lcom/tune2ai/sdk/core/workflow/StepType$Companion;
+	public static final field MODEL Lcom/tune2ai/sdk/core/workflow/StepType;
+	public static final field TOOL Lcom/tune2ai/sdk/core/workflow/StepType;
+	public static fun getEntries ()Lkotlin/enums/EnumEntries;
+	public static fun valueOf (Ljava/lang/String;)Lcom/tune2ai/sdk/core/workflow/StepType;
+	public static fun values ()[Lcom/tune2ai/sdk/core/workflow/StepType;
+}
+
+public final class com/tune2ai/sdk/core/workflow/StepType$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/Transition {
+	public static final field Companion Lcom/tune2ai/sdk/core/workflow/Transition$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Lcom/tune2ai/sdk/core/workflow/Transition;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/core/workflow/Transition;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/core/workflow/Transition;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getEquals ()Ljava/lang/String;
+	public final fun getTo ()Ljava/lang/String;
+	public final fun getWhenVar ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/tune2ai/sdk/core/workflow/Transition$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/core/workflow/Transition$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/core/workflow/Transition;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/core/workflow/Transition;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/Transition$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/WorkflowDefinition {
+	public static final field Companion Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition$Companion;
+	public fun <init> (Ljava/lang/String;ILjava/util/List;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;ILjava/util/List;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/util/List;
+	public final fun component4 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;ILjava/util/List;Ljava/util/List;)Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;Ljava/lang/String;ILjava/util/List;Ljava/util/List;ILjava/lang/Object;)Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getInputs ()Ljava/util/List;
+	public final fun getSteps ()Ljava/util/List;
+	public final fun getVersion ()I
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/tune2ai/sdk/core/workflow/WorkflowDefinition$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/core/workflow/WorkflowDefinition;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/WorkflowDefinition$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/WorkflowStep {
+	public static final field Companion Lcom/tune2ai/sdk/core/workflow/WorkflowStep$Companion;
+	public fun <init> (Ljava/lang/String;Lcom/tune2ai/sdk/core/workflow/StepType;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)V
+	public synthetic fun <init> (Ljava/lang/String;Lcom/tune2ai/sdk/core/workflow/StepType;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Lcom/tune2ai/sdk/core/workflow/StepType;
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/lang/String;
+	public final fun component5 ()Ljava/lang/String;
+	public final fun component6 ()Ljava/lang/String;
+	public final fun component7 ()Ljava/util/List;
+	public final fun copy (Ljava/lang/String;Lcom/tune2ai/sdk/core/workflow/StepType;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/tune2ai/sdk/core/workflow/WorkflowStep;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/core/workflow/WorkflowStep;Ljava/lang/String;Lcom/tune2ai/sdk/core/workflow/StepType;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;ILjava/lang/Object;)Lcom/tune2ai/sdk/core/workflow/WorkflowStep;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getArguments ()Ljava/lang/String;
+	public final fun getId ()Ljava/lang/String;
+	public final fun getOutput ()Ljava/lang/String;
+	public final fun getOutputVar ()Ljava/lang/String;
+	public final fun getPrompt ()Ljava/lang/String;
+	public final fun getTool ()Ljava/lang/String;
+	public final fun getTransitions ()Ljava/util/List;
+	public final fun getType ()Lcom/tune2ai/sdk/core/workflow/StepType;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/tune2ai/sdk/core/workflow/WorkflowStep$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/core/workflow/WorkflowStep$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/core/workflow/WorkflowStep;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/core/workflow/WorkflowStep;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/core/workflow/WorkflowStep$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/inference/BackendCapabilities {
+	public fun <init> (Ljava/util/Set;Ljava/util/Set;Z)V
+	public synthetic fun <init> (Ljava/util/Set;Ljava/util/Set;ZILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/util/Set;
+	public final fun component2 ()Ljava/util/Set;
+	public final fun component3 ()Z
+	public final fun copy (Ljava/util/Set;Ljava/util/Set;Z)Lcom/tune2ai/sdk/inference/BackendCapabilities;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/inference/BackendCapabilities;Ljava/util/Set;Ljava/util/Set;ZILjava/lang/Object;)Lcom/tune2ai/sdk/inference/BackendCapabilities;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getFormats ()Ljava/util/Set;
+	public final fun getRequiresNetwork ()Z
+	public final fun getTasks ()Ljava/util/Set;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/inference/GenerateRequest {
+	public fun <init> (Ljava/util/List;IF)V
+	public final fun component1 ()Ljava/util/List;
+	public final fun component2 ()I
+	public final fun component3 ()F
+	public final fun copy (Ljava/util/List;IF)Lcom/tune2ai/sdk/inference/GenerateRequest;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/inference/GenerateRequest;Ljava/util/List;IFILjava/lang/Object;)Lcom/tune2ai/sdk/inference/GenerateRequest;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMaxTokens ()I
+	public final fun getMessages ()Ljava/util/List;
+	public final fun getTemperature ()F
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/inference/InferenceBackend {
+	public fun embed (Lcom/tune2ai/sdk/inference/LoadedModel;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun generate (Lcom/tune2ai/sdk/inference/LoadedModel;Lcom/tune2ai/sdk/inference/GenerateRequest;)Lkotlinx/coroutines/flow/Flow;
+	public abstract fun getCapabilities ()Lcom/tune2ai/sdk/inference/BackendCapabilities;
+	public abstract fun getId ()Ljava/lang/String;
+	public fun getUnavailableReason ()Ljava/lang/String;
+	public abstract fun load (Lcom/tune2ai/sdk/api/ModelDescriptor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public abstract fun unload (Lcom/tune2ai/sdk/inference/LoadedModel;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/inference/InferenceBackend$DefaultImpls {
+	public static fun embed (Lcom/tune2ai/sdk/inference/InferenceBackend;Lcom/tune2ai/sdk/inference/LoadedModel;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static fun getUnavailableReason (Lcom/tune2ai/sdk/inference/InferenceBackend;)Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/inference/LoadedModel {
+	public abstract fun getDescriptor ()Lcom/tune2ai/sdk/api/ModelDescriptor;
+}
+
+public final class com/tune2ai/sdk/services/embedding/Candidate {
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;)Lcom/tune2ai/sdk/services/embedding/Candidate;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/services/embedding/Candidate;Ljava/lang/String;Ljava/lang/String;ILjava/lang/Object;)Lcom/tune2ai/sdk/services/embedding/Candidate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/services/embedding/CosineReranker : com/tune2ai/sdk/services/embedding/Reranker {
+	public fun <init> (Lcom/tune2ai/sdk/services/embedding/EmbeddingService;)V
+	public fun rerank (Ljava/lang/String;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public abstract interface class com/tune2ai/sdk/services/embedding/Embedder {
+	public abstract fun embed (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/services/embedding/EmbeddingResult {
+	public fun <init> (Ljava/lang/String;IILjava/util/List;)V
+	public final fun getDimensions ()I
+	public final fun getInputLimit ()I
+	public final fun getModelId ()Ljava/lang/String;
+	public final fun getVectors ()Ljava/util/List;
+}
+
+public final class com/tune2ai/sdk/services/embedding/EmbeddingService : com/tune2ai/sdk/services/embedding/Embedder {
+	public fun embed (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun embed (Ljava/util/List;Lcom/tune2ai/sdk/api/RequestOptions;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun embed$default (Lcom/tune2ai/sdk/services/embedding/EmbeddingService;Ljava/util/List;Lcom/tune2ai/sdk/api/RequestOptions;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/services/embedding/EmbeddingServiceKt {
+	public static final fun cosine ([F[F)D
+}
+
+public final class com/tune2ai/sdk/services/embedding/Ranked {
+	public fun <init> (Lcom/tune2ai/sdk/services/embedding/Candidate;D)V
+	public final fun component1 ()Lcom/tune2ai/sdk/services/embedding/Candidate;
+	public final fun component2 ()D
+	public final fun copy (Lcom/tune2ai/sdk/services/embedding/Candidate;D)Lcom/tune2ai/sdk/services/embedding/Ranked;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/services/embedding/Ranked;Lcom/tune2ai/sdk/services/embedding/Candidate;DILjava/lang/Object;)Lcom/tune2ai/sdk/services/embedding/Ranked;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCandidate ()Lcom/tune2ai/sdk/services/embedding/Candidate;
+	public final fun getScore ()D
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public abstract interface class com/tune2ai/sdk/services/embedding/Reranker {
+	public abstract fun rerank (Ljava/lang/String;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/services/memory/MemoryEngine {
+	public fun <init> (Lcom/tune2ai/sdk/core/Storage;Lcom/tune2ai/sdk/services/embedding/Embedder;Lkotlin/jvm/functions/Function0;)V
+	public synthetic fun <init> (Lcom/tune2ai/sdk/core/Storage;Lcom/tune2ai/sdk/services/embedding/Embedder;Lkotlin/jvm/functions/Function0;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun clear (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun delete (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getEnabled ()Z
+	public final fun list (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun search (Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun search$default (Lcom/tune2ai/sdk/services/memory/MemoryEngine;Ljava/lang/String;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun setEnabled (Z)V
+	public final fun update (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun write (Ljava/lang/String;Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/services/memory/MemoryEntry {
+	public static final field Companion Lcom/tune2ai/sdk/services/memory/MemoryEntry$Companion;
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;J)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()Ljava/lang/String;
+	public final fun component3 ()J
+	public final fun copy (Ljava/lang/String;Ljava/lang/String;J)Lcom/tune2ai/sdk/services/memory/MemoryEntry;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/services/memory/MemoryEntry;Ljava/lang/String;Ljava/lang/String;JILjava/lang/Object;)Lcom/tune2ai/sdk/services/memory/MemoryEntry;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getCreatedAt ()J
+	public final fun getId ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+
+public final synthetic class com/tune2ai/sdk/services/memory/MemoryEntry$$serializer : kotlinx/serialization/internal/GeneratedSerializer {
+	public static final field INSTANCE Lcom/tune2ai/sdk/services/memory/MemoryEntry$$serializer;
+	public final fun childSerializers ()[Lkotlinx/serialization/KSerializer;
+	public final fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Lcom/tune2ai/sdk/services/memory/MemoryEntry;
+	public synthetic fun deserialize (Lkotlinx/serialization/encoding/Decoder;)Ljava/lang/Object;
+	public final fun getDescriptor ()Lkotlinx/serialization/descriptors/SerialDescriptor;
+	public final fun serialize (Lkotlinx/serialization/encoding/Encoder;Lcom/tune2ai/sdk/services/memory/MemoryEntry;)V
+	public synthetic fun serialize (Lkotlinx/serialization/encoding/Encoder;Ljava/lang/Object;)V
+	public fun typeParametersSerializers ()[Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/services/memory/MemoryEntry$Companion {
+	public final fun serializer ()Lkotlinx/serialization/KSerializer;
+}
+
+public final class com/tune2ai/sdk/services/prompt/PromptTemplate {
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;)V
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/util/Set;)V
+	public synthetic fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/util/Set;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/Set;
+	public final fun copy (Ljava/lang/String;ILjava/lang/String;Ljava/util/Set;)Lcom/tune2ai/sdk/services/prompt/PromptTemplate;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/services/prompt/PromptTemplate;Ljava/lang/String;ILjava/lang/String;Ljava/util/Set;ILjava/lang/Object;)Lcom/tune2ai/sdk/services/prompt/PromptTemplate;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getId ()Ljava/lang/String;
+	public final fun getRef ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+	public final fun getVariables ()Ljava/util/Set;
+	public final fun getVersion ()I
+	public fun hashCode ()I
+	public final fun render (Ljava/util/Map;)Ljava/lang/String;
+	public static synthetic fun render$default (Lcom/tune2ai/sdk/services/prompt/PromptTemplate;Ljava/util/Map;ILjava/lang/Object;)Ljava/lang/String;
+	public fun toString ()Ljava/lang/String;
+}
+
+public final class com/tune2ai/sdk/services/rag/Chunker {
+	public static final field CHARS_PER_TOKEN I
+	public fun <init> ()V
+	public fun <init> (II)V
+	public synthetic fun <init> (IIILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun chunk (Ljava/lang/String;)Ljava/util/List;
+}
+
+public final class com/tune2ai/sdk/services/rag/RagEngine {
+	public fun <init> (Lcom/tune2ai/sdk/core/Storage;Lcom/tune2ai/sdk/services/embedding/EmbeddingService;Lcom/tune2ai/sdk/services/rag/Chunker;)V
+	public synthetic fun <init> (Lcom/tune2ai/sdk/core/Storage;Lcom/tune2ai/sdk/services/embedding/EmbeddingService;Lcom/tune2ai/sdk/services/rag/Chunker;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public final fun add (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun add$default (Lcom/tune2ai/sdk/services/rag/RagEngine;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun clear (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun delete (Ljava/lang/String;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun getEnabled ()Z
+	public final fun retrieve (Ljava/lang/String;ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun retrieve$default (Lcom/tune2ai/sdk/services/rag/RagEngine;Ljava/lang/String;ILkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+	public final fun setEnabled (Z)V
+	public final fun sources (Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public final fun update (Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static synthetic fun update$default (Lcom/tune2ai/sdk/services/rag/RagEngine;Ljava/lang/String;Ljava/lang/String;Ljava/util/Map;Lkotlin/coroutines/Continuation;ILjava/lang/Object;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/services/rag/RetrievedChunk {
+	public fun <init> (Ljava/lang/String;ILjava/lang/String;Ljava/util/Map;D)V
+	public final fun component1 ()Ljava/lang/String;
+	public final fun component2 ()I
+	public final fun component3 ()Ljava/lang/String;
+	public final fun component4 ()Ljava/util/Map;
+	public final fun component5 ()D
+	public final fun copy (Ljava/lang/String;ILjava/lang/String;Ljava/util/Map;D)Lcom/tune2ai/sdk/services/rag/RetrievedChunk;
+	public static synthetic fun copy$default (Lcom/tune2ai/sdk/services/rag/RetrievedChunk;Ljava/lang/String;ILjava/lang/String;Ljava/util/Map;DILjava/lang/Object;)Lcom/tune2ai/sdk/services/rag/RetrievedChunk;
+	public fun equals (Ljava/lang/Object;)Z
+	public final fun getMetadata ()Ljava/util/Map;
+	public final fun getOrdinal ()I
+	public final fun getRef ()Ljava/lang/String;
+	public final fun getScore ()D
+	public final fun getSourceId ()Ljava/lang/String;
+	public final fun getText ()Ljava/lang/String;
+	public fun hashCode ()I
+	public fun toString ()Ljava/lang/String;
+}
+

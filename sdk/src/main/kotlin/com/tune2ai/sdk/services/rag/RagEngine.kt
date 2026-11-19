@@ -90,7 +90,7 @@ class RagEngine(
  * nothing while [RagEngine.enabled] is false or the index is empty, so chat works with no embedding
  * model until content is added.
  */
-class RagContextSource(private val rag: RagEngine, private val limit: Int = 3) : ContextSource {
+internal class RagContextSource(private val rag: RagEngine, private val limit: Int = 3) : ContextSource {
     override val name = "rag"
 
     override suspend fun fetch(query: String, model: ModelDescriptor): List<ContextItem> =

@@ -18,7 +18,7 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 **Tasks**
 
 - [x] T2AI-040.1 `Tune2AI.kt` (package `com.tune2ai.sdk`, because the Builder takes an Android `Context`) and `Tune2AI.Builder` wiring platform, storage, registry, Model Manager, controller.
-- [x] T2AI-040.2 Moved to T2AI-053: public API surface review and API dump belong with the first versioned release.
+- [x] T2AI-040.2 Moved to T2AI-053: public API surface review and API dump belong with the first versioned release. (Done there: `apiDump` and `apiCheck`.)
 - [x] T2AI-040.3 Tests: build with fakes; build without any backend fails clearly; `close()` unloads.
 
 ### T2AI-041 — Publish the Chat API

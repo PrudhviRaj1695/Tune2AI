@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.dokka)
 }
 
 android {
@@ -27,3 +28,6 @@ dependencies {
     testImplementation libs.junit
     testImplementation libs.kotlinx.coroutines.test
 }
+
+apply from: rootProject.file('gradle/api-dump.gradle')
+apply from: rootProject.file('gradle/publish.gradle')

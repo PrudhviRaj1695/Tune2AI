@@ -8,7 +8,7 @@ import kotlinx.serialization.json.Json
 
 /** One indexed chunk: its text and metadata, the vector that represents it, and which model made that vector. */
 @Serializable
-data class IndexedChunk(
+internal data class IndexedChunk(
     val sourceId: String,
     val ordinal: Int,
     val text: String,
@@ -17,14 +17,14 @@ data class IndexedChunk(
     val vector: FloatArray,
 )
 
-data class ScoredChunk(val chunk: IndexedChunk, val score: Double)
+internal data class ScoredChunk(val chunk: IndexedChunk, val score: Double)
 
 /**
  * Chunk vectors kept in the `rag` storage namespace (decision D5) and searched by cosine similarity.
  * ponytail: brute force, every search reads and scores every chunk. Fine up to a few thousand chunks
  * on a phone; past that, add an ANN index behind this same class.
  */
-class VectorIndex(private val storage: Storage) {
+internal class VectorIndex(private val storage: Storage) {
 
     suspend fun put(chunk: IndexedChunk) {
         storage.put(NAMESPACE, key(chunk.sourceId, chunk.ordinal), JSON.encodeToString(IndexedChunk.serializer(), chunk))

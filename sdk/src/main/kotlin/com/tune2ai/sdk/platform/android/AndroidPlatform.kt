@@ -11,7 +11,7 @@ import kotlinx.coroutines.Dispatchers
  * The Android adapter: the only place outside backend modules that touches `android.*` (FR-PLT-1).
  * Holds the application context only, never an Activity. Call [close] when the SDK shuts down.
  */
-class AndroidPlatform(context: Context) : Platform {
+internal class AndroidPlatform(context: Context) : Platform {
     private val app = context.applicationContext
     private val sqlite = SqliteStorage(app)
     private val monitor = AndroidResourceMonitor(app)

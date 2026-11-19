@@ -65,7 +65,7 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 
 ### T2AI-052 — Document SDK integration and supported models
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 9 · **Requirements:** FR-REL-1 · **Depends on:** milestones 1–7
 
 **Story:** As an application developer, I want setup and compatibility docs so that I choose a supported configuration and troubleshoot integration.
@@ -77,28 +77,28 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 
 **Tasks**
 
-- [ ] T2AI-052.1 `docs/getting-started.md` (Android).
-- [ ] T2AI-052.2 `docs/api/` one page per API with examples compiled in a docs test source set so they cannot rot.
-- [ ] T2AI-052.3 Backend and model compatibility matrix.
-- [ ] T2AI-052.4 Generated API reference with Dokka.
+- [x] T2AI-052.1 `docs/getting-started.md` (Android).
+- [x] T2AI-052.2 `docs/api/` one page per API with examples compiled in a docs test source set so they cannot rot. (Examples live in `sdk/src/docsTest`; `DocsExamplesTest` runs them and `DocsSnippetsTest` fails if a `kotlin` block in the docs differs from them. Blocks that need other modules are tagged `kotlin nocheck`. Memory, embeddings and RAG share one page, `knowledge.md`; events and errors have their own.)
+- [x] T2AI-052.3 Backend and model compatibility matrix (`docs/compatibility.md`; lists tested models separately from models that should work).
+- [x] T2AI-052.4 Generated API reference with Dokka (`./gradlew :dokkaGenerate` writes `build/dokka/html`; added to CI).
 
 ### T2AI-053 — Package and version SDK releases
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 9 · **Requirements:** FR-REL-1, NFR-10, NFR-11 · **Depends on:** T2AI-052
 
 **Story:** As a release owner, I want versioned SDK packages so that applications adopt Tune2AI predictably.
 
 **Acceptance criteria**
 
-- `:sdk`, `:sdk-llama`, `:sdk-onnx`, and `:sdk-remote` publish as versioned Maven artifacts.
+- `:sdk`, `:sdk-llama`, and `:sdk-remote` publish as versioned Maven artifacts. (`:sdk-onnx` does not exist: ONNX Runtime is deferred, decision D8.)
 - Release notes list capabilities, the backend matrix, measured NFR values, known limitations, and migration steps.
 - `:sdk` AAR size is checked against NFR-10 in CI.
 
 **Tasks**
 
-- [ ] T2AI-053.1 `maven-publish` configuration with a single version property in `gradle.properties`.
-- [ ] T2AI-053.2 Release workflow: tag → build → test → publish.
-- [ ] T2AI-053.3 CI size check for the `:sdk` AAR.
-- [ ] T2AI-053.4 `CHANGELOG.md` and the release notes template.
-- [ ] T2AI-053.5 Public API surface review (mark internals `internal`) and an API dump checked in CI (moved from T2AI-040.2).
+- [x] T2AI-053.1 `maven-publish` configuration with a single version property in `gradle.properties`. (`gradle/publish.gradle`; `VERSION_NAME` is the property and `VersionTest` fails if `SDK_VERSION` differs. Verified with a dry-run publish to `build/repo`; the GitHub Packages upload itself runs only from the release workflow.)
+- [x] T2AI-053.2 Release workflow: tag → build → test → publish. (`.github/workflows/release.yml`, decision D10. It has not run yet: it starts on the first `v*` tag. The version check, the release-notes extraction, and every Gradle task it calls were run locally.)
+- [x] T2AI-053.3 CI size check for the `:sdk` AAR. (`./gradlew :sdk:checkAarSize`, run in both workflows; 440,460 bytes against the 1,048,576 budget.)
+- [x] T2AI-053.4 `CHANGELOG.md` and the release notes template. (`CHANGELOG.md` has the 0.1.0 notes with measured NFR values; added `NFR-5` measurement `firstTokenIsDeliveredWithinBudget`.)
+- [x] T2AI-053.5 Public API surface review (mark internals `internal`) and an API dump checked in CI (moved from T2AI-040.2). (Engines, router, model manager, platform plumbing, index internals, and context sources are now `internal`; the `:sdk` dump went from 1,402 to 1,032 lines. The dump is produced by `gradle/api-dump.gradle`, decision D9, because the validator plugin does not support AGP 9. `:sdk-llama`'s device tests moved onto the public `Tune2AI` facade.)

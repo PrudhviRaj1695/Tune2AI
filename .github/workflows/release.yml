@@ -1,0 +1,53 @@
+name: Release
+
+# Push a tag like v0.1.0 to build, verify, and publish the SDK modules to GitHub Packages
+# and create a GitHub release. The tag must match VERSION_NAME in gradle.properties.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Tag matches the version in gradle.properties
+        run: |
+          version=$(grep '^VERSION_NAME=' gradle.properties | cut -d= -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION_NAME=$version"; exit 1
+          fi
+
+      - name: Build, test, and verify
+        run: >
+          ./gradlew :sdk:testDebugUnitTest :sdk-remote:testDebugUnitTest
+          :sdk:assembleRelease :sdk-remote:assembleRelease :sdk-llama:assembleRelease
+          :sdk:checkAarSize apiCheck :dokkaGenerate
+
+      - name: Publish to GitHub Packages
+        run: ./gradlew publish
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the GitHub release
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          # Release notes: the matching CHANGELOG.md section.
+          awk -v v="$version" 'index($0, "## [" v "]") == 1 {on=1; next} substr($0, 1, 4) == "## [" {on=0} on' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then echo "No CHANGELOG.md section for $version"; exit 1; fi
+          gh release create "$GITHUB_REF_NAME" --title "Tune2AI $version" --notes-file release-notes.md
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

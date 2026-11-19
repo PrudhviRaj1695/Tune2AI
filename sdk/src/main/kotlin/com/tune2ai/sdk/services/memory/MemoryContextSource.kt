@@ -8,7 +8,7 @@ import com.tune2ai.sdk.services.context.ContextSource
  * Feeds a session's memory into the Context Manager (FR-SVC-6) — memory's only path to a request.
  * Returns nothing while [MemoryEngine.enabled] is false.
  */
-class MemoryContextSource(
+internal class MemoryContextSource(
     private val memory: MemoryEngine,
     private val session: String,
     private val limit: Int = 3,

@@ -24,14 +24,14 @@ import kotlinx.serialization.json.Json
  * one ends [InvalidRequest][Tune2AIException.InvalidRequest] with no side effects. Model steps go
  * through the [RequestController] (routing, context, limits apply per step); tool steps go through the
  * [ToolCallingEngine]. Variables flow between steps through a string map seeded with the run's inputs.
- * The terminal step's output is emitted as a [TextDelta][Tune2AIEvent.TextDelta] before [Completed];
+ * The terminal step's output is emitted as a [TextDelta][Tune2AIEvent.TextDelta] before [Tune2AIEvent.Completed];
  * the stream always ends in exactly one terminal event (NFR-7).
  *
  * When a [storage] is supplied the run is checkpointed to the `workflows` namespace after each step
  * (FR-ORC-6), keyed by the run's [RequestId]; [resume] continues from the last checkpoint without
  * re-running completed steps. Without a [storage], runs are not persisted and [resume] is unavailable.
  */
-class WorkflowEngine(
+internal class WorkflowEngine(
     private val controller: RequestController,
     private val tools: ToolCallingEngine,
     private val storage: Storage? = null,

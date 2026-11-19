@@ -10,10 +10,10 @@ import com.tune2ai.sdk.core.ContextAssembler
 import com.tune2ai.sdk.services.prompt.PromptManager
 
 /** A piece of retrieved knowledge or memory, with a reference reported in the request trace. */
-data class ContextItem(val ref: String, val text: String)
+internal data class ContextItem(val ref: String, val text: String)
 
 /** Memory (T2AI-025) and RAG (T2AI-024) plug in here; the Context Manager is their only path to a model. */
-interface ContextSource {
+internal interface ContextSource {
     val name: String
     suspend fun fetch(query: String, model: ModelDescriptor): List<ContextItem>
 }
@@ -24,7 +24,7 @@ interface ContextSource {
  * tokens reserved for output, dropping the oldest conversation turns first, and reports what was
  * included and what was left out.
  */
-class ContextManager(
+internal class ContextManager(
     private val prompts: PromptManager,
     private val defaultTemplate: String? = null,
     private val sources: List<ContextSource> = emptyList(),
@@ -88,4 +88,4 @@ class ContextManager(
 }
 
 /** ponytail: ~4 characters per token; use the backend's tokenizer if trimming proves too loose or too tight. */
-fun estimateTokens(text: String): Int = (text.length + 3) / 4
+internal fun estimateTokens(text: String): Int = (text.length + 3) / 4

@@ -16,7 +16,7 @@ internal fun render(text: String, vars: Map<String, String>): String =
  * and cycles (which this engine cannot bound), plus structural and variable-reference errors that would
  * otherwise fail mid-run.
  */
-object WorkflowValidator {
+internal object WorkflowValidator {
     fun check(definition: WorkflowDefinition, knownTools: Set<String>): List<String> {
         val problems = mutableListOf<String>()
         val steps = definition.steps

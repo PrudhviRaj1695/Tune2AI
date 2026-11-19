@@ -1,0 +1,70 @@
+// Public API dump and check for the published SDK modules (T2AI-053.5).
+//
+//   ./gradlew apiDump    writes <module>/api/<module>.api from the compiled release classes
+//   ./gradlew apiCheck   fails if the public API differs from the checked-in dump (also part of `check`)
+//
+// Why a script and not the binary-compatibility-validator plugin: that plugin (and the Kotlin plugin's own
+// ABI validation) do not recognise AGP 9's built-in Kotlin, so they register no tasks. This script calls the
+// validator's engine library directly, which still understands Kotlin visibility (internal, @JvmSynthetic, ...).
+// ponytail: the engine version is pinned here; move to the Kotlin Gradle plugin's ABI validation once it
+// supports Android library modules.
+
+buildscript {
+    repositories { mavenCentral() }
+    dependencies {
+        classpath 'org.jetbrains.kotlinx:binary-compatibility-validator:0.18.2'
+        classpath 'org.ow2.asm:asm:9.8'
+        classpath 'org.ow2.asm:asm-tree:9.8'
+        classpath 'org.jetbrains.kotlin:kotlin-metadata-jvm:2.2.10' // keep equal to the kotlin version in libs.versions.toml
+    }
+}
+
+def apiFile = file("api/${project.name}.api")
+
+def renderApi = {
+    def classesJar = tasks.named('bundleLibCompileToJarRelease').get().outputs.files.singleFile
+    def jar = new java.util.jar.JarFile(classesJar)
+    try {
+        def keepAll = { String name -> true } as kotlin.jvm.functions.Function1
+        def api = kotlinx.validation.api.KotlinSignaturesLoadingKt.loadApiFromJvmClasses(jar, keepAll)
+        api = kotlinx.validation.api.KotlinSignaturesLoadingKt.filterOutNonPublic(api, [], [])
+        def out = new StringBuilder()
+        kotlinx.validation.api.KotlinSignaturesLoadingKt.dump(api, out)
+        out.toString().replace('\r\n', '\n')
+    } finally {
+        jar.close()
+    }
+}
+
+tasks.register('apiDump') {
+    group = 'verification'
+    description = 'Writes the public API of this module to api/<module>.api'
+    dependsOn 'bundleLibCompileToJarRelease'
+    doLast {
+        apiFile.parentFile.mkdirs()
+        apiFile.setText(renderApi(), 'UTF-8')
+        logger.lifecycle("Wrote ${apiFile}")
+    }
+}
+
+tasks.register('apiCheck') {
+    group = 'verification'
+    description = 'Fails if the public API differs from the checked-in api/<module>.api'
+    dependsOn 'bundleLibCompileToJarRelease'
+    doLast {
+        if (!apiFile.exists()) throw new GradleException("No API dump at ${apiFile}. Run ./gradlew ${project.path}:apiDump and commit it.")
+        def expected = apiFile.getText('UTF-8').replace('\r\n', '\n').readLines() as Set
+        def actual = renderApi().readLines()
+        def added = actual.findAll { !(it in expected) }
+        def removed = (expected - (actual as Set)).toList()
+        if (added || removed) {
+            throw new GradleException(
+                "The public API of ${project.path} changed.\n" +
+                (added ? "Added:\n  " + added.take(40).join('\n  ') + '\n' : '') +
+                (removed ? "Removed:\n  " + removed.take(40).join('\n  ') + '\n' : '') +
+                "If the change is intended, run ./gradlew ${project.path}:apiDump and commit the new dump (a breaking change needs a major version, NFR-11).")
+        }
+    }
+}
+
+tasks.matching { it.name == 'check' }.configureEach { dependsOn 'apiCheck' }

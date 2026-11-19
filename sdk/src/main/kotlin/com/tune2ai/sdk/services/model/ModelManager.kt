@@ -24,7 +24,7 @@ import kotlinx.serialization.json.Json
 import java.io.File
 
 /** A model and a backend that can run it for a task. */
-data class Candidate(val model: ModelDescriptor, val backend: InferenceBackend, val loaded: Boolean)
+internal data class Candidate(val model: ModelDescriptor, val backend: InferenceBackend, val loaded: Boolean)
 
 /**
  * Owns the model catalog, availability, and load state (FR-SVC-1). The only caller of
@@ -33,7 +33,7 @@ data class Candidate(val model: ModelDescriptor, val backend: InferenceBackend, 
  *
  * Models in use are held through a [Lease]; on low memory, models without leases are unloaded.
  */
-class ModelManager(
+internal class ModelManager(
     private val backends: List<InferenceBackend>,
     private val storage: Storage,
     private val resources: ResourceMonitor,

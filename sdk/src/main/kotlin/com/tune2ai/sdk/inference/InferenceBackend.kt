@@ -55,9 +55,9 @@ interface InferenceBackend {
 }
 
 /** True if this backend supports [model]'s format and is allowed to run it (ignores availability). */
-fun InferenceBackend.supports(model: ModelDescriptor): Boolean =
+internal fun InferenceBackend.supports(model: ModelDescriptor): Boolean =
     model.format in capabilities.formats && (model.backends.isEmpty() || id in model.backends)
 
 /** True if this backend is available and may run [model] for [task]. */
-fun InferenceBackend.canRun(model: ModelDescriptor, task: Task): Boolean =
+internal fun InferenceBackend.canRun(model: ModelDescriptor, task: Task): Boolean =
     unavailableReason == null && supports(model) && task in capabilities.tasks && task in model.tasks

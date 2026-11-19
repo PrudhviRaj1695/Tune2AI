@@ -1,0 +1,50 @@
+// Maven publishing for the SDK library modules (T2AI-053.1). Applied by :sdk, :sdk-llama, and :sdk-remote.
+//
+//   ./gradlew publishAllPublicationsToLocalRepository   writes build/repo (a dry run; no credentials needed)
+//   ./gradlew publish                                   also uploads to GitHub Packages (needs GITHUB_ACTOR and GITHUB_TOKEN)
+//
+// The version comes from VERSION_NAME in gradle.properties. Artifact ids are tune2ai-<module>.
+
+apply plugin: 'maven-publish'
+
+android {
+    publishing {
+        singleVariant('release') { withSourcesJar() }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                groupId = rootProject.property('GROUP')
+                artifactId = "tune2ai-${project.name}"
+                version = rootProject.property('VERSION_NAME')
+                pom {
+                    name = "Tune2AI ${project.name}"
+                    description = project.description ?: 'On-device AI SDK for Android: chat, agents, workflows, memory, and RAG.'
+                    url = 'https://github.com/PrudhviRaj1695/Tune2AI'
+                    scm {
+                        url = 'https://github.com/PrudhviRaj1695/Tune2AI'
+                        connection = 'scm:git:https://github.com/PrudhviRaj1695/Tune2AI.git'
+                    }
+                }
+            }
+        }
+        repositories {
+            maven {
+                name = 'Local'
+                url = rootProject.layout.buildDirectory.dir('repo')
+            }
+            maven {
+                name = 'GitHubPackages'
+                url = uri('https://maven.pkg.github.com/PrudhviRaj1695/Tune2AI')
+                credentials {
+                    username = System.getenv('GITHUB_ACTOR')
+                    password = System.getenv('GITHUB_TOKEN')
+                }
+            }
+        }
+    }
+}

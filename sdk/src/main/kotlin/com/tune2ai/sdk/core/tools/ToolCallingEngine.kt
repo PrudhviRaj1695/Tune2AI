@@ -17,10 +17,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 
 /** The outcome of one tool call. Failures are results too ([isError]), never request failures. */
-data class ToolOutcome(val resultJson: String, val isError: Boolean)
+internal data class ToolOutcome(val resultJson: String, val isError: Boolean)
 
 /** What a model step asked for. */
-sealed interface ParsedStep {
+internal sealed interface ParsedStep {
     data object Answer : ParsedStep
     data class Call(val name: String, val argumentsJson: String) : ParsedStep
     data class Malformed(val reason: String) : ParsedStep
@@ -30,7 +30,7 @@ sealed interface ParsedStep {
  * Registers host-provided tools and invokes them safely (FR-ORC-3): allow-list check, schema
  * validation, timeout, and error capture. Tool arguments and results are never logged (NFR-2).
  */
-class ToolCallingEngine(
+internal class ToolCallingEngine(
     tools: List<Tool>,
     private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {

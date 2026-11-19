@@ -24,7 +24,7 @@ import kotlinx.coroutines.withTimeout
  * The messages sent to the model, a one-line summary for the trace, and the sources that were
  * [included] or [omitted] to fit the context.
  */
-data class AssembledContext(
+internal data class AssembledContext(
     val messages: List<ChatMessage>,
     val summary: String,
     val included: List<String> = emptyList(),
@@ -32,7 +32,7 @@ data class AssembledContext(
 )
 
 /** Builds the model input. Implemented by the Context Manager (T2AI-022). */
-fun interface ContextAssembler {
+internal fun interface ContextAssembler {
     suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions): AssembledContext
 
     companion object {
@@ -45,7 +45,7 @@ fun interface ContextAssembler {
  * generate. Emits [Progress] for each stage, streams text, and always ends with exactly one
  * terminal event. Runs off the main thread (NFR-6) and enforces the request deadline.
  */
-class RequestController(
+internal class RequestController(
     private val models: ModelManager,
     private val router: Router,
     private val context: ContextAssembler = ContextAssembler.PassThrough,

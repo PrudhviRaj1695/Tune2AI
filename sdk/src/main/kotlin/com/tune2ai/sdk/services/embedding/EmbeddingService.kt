@@ -29,7 +29,7 @@ class EmbeddingResult(
  * lease from the [ModelManager], so loading, memory limits, and trimming apply as for any request.
  * Also an [Embedder], which plugs it into memory search.
  */
-class EmbeddingService(
+class EmbeddingService internal constructor(
     private val models: ModelManager,
     private val router: Router,
 ) : Embedder {

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.android.library)
+    alias(libs.plugins.dokka)
     alias(libs.plugins.kotlin.serialization)
 }
 
@@ -18,8 +19,10 @@ android {
     }
 
     // Contract tests run against both the JVM fakes (test) and the Android implementations (androidTest).
+    // docsTest holds the compiled examples that docs/ quotes (T2AI-052); DocsSnippetsTest keeps the two in sync.
     sourceSets {
         test.kotlin.srcDir 'src/sharedTest/kotlin'
+        test.kotlin.srcDir 'src/docsTest/kotlin'
         androidTest.kotlin.srcDir 'src/sharedTest/kotlin'
     }
 }
@@ -57,3 +60,21 @@ def checkSharedPackages = tasks.register('checkSharedPackages') {
     }
 }
 tasks.named('preBuild') { dependsOn checkSharedPackages }
+
+// NFR-10: the :sdk release AAR stays within 1 MB. Native backends are separate modules so apps only ship what they use.
+tasks.register('checkAarSize') {
+    group = 'verification'
+    description = 'Fails if the :sdk release AAR is larger than the NFR-10 budget'
+    dependsOn 'assembleRelease'
+    def aar = layout.buildDirectory.file('outputs/aar/sdk-release.aar')
+    doLast {
+        def limit = 1024L * 1024
+        def size = aar.get().asFile.length()
+        logger.lifecycle("sdk-release.aar: ${size} bytes (budget ${limit})")
+        if (size > limit) throw new GradleException("The :sdk AAR is ${size} bytes, over the NFR-10 budget of ${limit}.")
+    }
+}
+tasks.named('check') { dependsOn 'checkAarSize' }
+
+apply from: rootProject.file('gradle/api-dump.gradle')
+apply from: rootProject.file('gradle/publish.gradle')

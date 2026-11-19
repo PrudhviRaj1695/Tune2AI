@@ -155,4 +155,28 @@ class RequestControllerTest {
             scope.cancel()
         }
     }
+
+    /** NFR-5: the first streamed token reaches the caller within 100 ms of the backend producing it. Real time, zero-latency backend. */
+    @Test
+    fun firstTokenIsDeliveredWithinBudget() = runBlocking {
+        val scope = CoroutineScope(Dispatchers.Default + Job())
+        try {
+            val backend = FakeBackend()
+            val manager = ModelManager(listOf(backend), InMemoryStorage(), FakeResourceMonitor(), ResourceLimits(), scope, fileExists = { true })
+            manager.register(fakeModel())
+            val controller = RequestController(manager, Router(manager), dispatcher = Dispatchers.Default)
+            suspend fun oneRun(): Double {
+                var receivedAt = 0L
+                controller.chat(hello).collect { if (it is TextDelta && receivedAt == 0L) receivedAt = System.nanoTime() }
+                return (receivedAt - backend.firstTokenNanos) / 1_000_000.0
+            }
+            repeat(50) { oneRun() } // warm up the JIT
+            val samples = List(300) { oneRun() }.sorted()
+            val p95 = samples[(samples.size * 0.95).toInt()]
+            println("First-token delivery latency: p50=${samples[samples.size / 2]} ms, p95=$p95 ms, max=${samples.last()} ms")
+            assertTrue("p95 first-token latency $p95 ms exceeds 100 ms", p95 <= 100.0)
+        } finally {
+            scope.cancel()
+        }
+    }
 }

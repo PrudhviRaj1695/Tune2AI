@@ -24,7 +24,7 @@ import kotlinx.coroutines.flow.transformWhile
  * Apply it before `flowOn` or `buffer`: an exception that crosses those operators cancels their
  * buffer, and events emitted just before the failure would be lost.
  */
-fun Flow<Tune2AIEvent>.withTerminalGuarantee(requestId: RequestId): Flow<Tune2AIEvent> = flow {
+internal fun Flow<Tune2AIEvent>.withTerminalGuarantee(requestId: RequestId): Flow<Tune2AIEvent> = flow {
     var finished = false
     emitAll(
         this@withTerminalGuarantee
@@ -52,7 +52,7 @@ fun Flow<Tune2AIEvent>.withTerminalGuarantee(requestId: RequestId): Flow<Tune2AI
 }
 
 /** Maps any throwable to the SDK error type, keeping SDK errors as they are. */
-fun Throwable.toTune2AIException(): Tune2AIException = when (this) {
+internal fun Throwable.toTune2AIException(): Tune2AIException = when (this) {
     is Tune2AIException -> this
     is TimeoutCancellationException -> Tune2AIException.Timeout(message ?: "Deadline exceeded")
     else -> Tune2AIException.BackendFailure(message ?: this::class.simpleName ?: "Unknown failure", this)

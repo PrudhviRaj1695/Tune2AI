@@ -1,0 +1,23 @@
+public final class com/tune2ai/sdk/llama/LlamaBackend : com/tune2ai/sdk/inference/InferenceBackend {
+	public static final field Companion Lcom/tune2ai/sdk/llama/LlamaBackend$Companion;
+	public static final field ID Ljava/lang/String;
+	public fun <init> ()V
+	public fun <init> (I)V
+	public synthetic fun <init> (IILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun embed (Lcom/tune2ai/sdk/inference/LoadedModel;Ljava/util/List;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public static final fun estimateMemoryBytes (Ljava/io/File;I)J
+	public fun generate (Lcom/tune2ai/sdk/inference/LoadedModel;Lcom/tune2ai/sdk/inference/GenerateRequest;)Lkotlinx/coroutines/flow/Flow;
+	public fun getCapabilities ()Lcom/tune2ai/sdk/inference/BackendCapabilities;
+	public fun getId ()Ljava/lang/String;
+	public fun getUnavailableReason ()Ljava/lang/String;
+	public fun load (Lcom/tune2ai/sdk/api/ModelDescriptor;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+	public fun unload (Lcom/tune2ai/sdk/inference/LoadedModel;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
+}
+
+public final class com/tune2ai/sdk/llama/LlamaBackend$Companion {
+	public final fun estimateMemoryBytes (Ljava/io/File;I)J
+}
+
+public final class com/tune2ai/sdk/llama/R {
+}
+

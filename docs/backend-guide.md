@@ -10,7 +10,7 @@ One module per backend (decision D3), so apps only ship what they use. Depend on
 
 ## 2. Implement the interface
 
-```kotlin
+```kotlin nocheck
 class MyBackend : InferenceBackend {
     override val id = "my-backend"                       // lowercase, [a-z0-9._-]
     override val capabilities = BackendCapabilities(
@@ -41,7 +41,7 @@ class MyBackend : InferenceBackend {
 
 Every backend runs the shared suite `InferenceBackendContract` (`sdk/src/sharedTest`): load/generate/unload, cancellation within 500 ms, and `ModelUnavailable` for a broken model.
 
-```kotlin
+```kotlin nocheck
 class MyBackendContractTest : InferenceBackendContract() {
     override fun backend() = MyBackend()
     override fun validModel() = …   // a real, small model
@@ -53,7 +53,7 @@ Add `test.kotlin.srcDir '../sdk/src/sharedTest/kotlin'` (JVM) or `androidTest.ko
 
 ## 4. Register it
 
-```kotlin
+```kotlin nocheck
 val ai = Tune2AI.Builder(context)
     .addBackend(LlamaBackend())
     .addBackend(MyBackend())

@@ -20,7 +20,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
 
-fun TestScope.modelManager(
+internal fun TestScope.modelManager(
     vararg backends: FakeBackend = arrayOf(FakeBackend()),
     resources: FakeResourceMonitor = FakeResourceMonitor(),
     storage: Storage = InMemoryStorage(),

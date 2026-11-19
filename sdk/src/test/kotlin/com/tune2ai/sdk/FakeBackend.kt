@@ -38,6 +38,11 @@ class FakeBackend(
     var lastRequest: GenerateRequest? = null
         private set
 
+    /** System.nanoTime() when the most recent generate call produced its first token (for NFR-5). */
+    @Volatile
+    var firstTokenNanos = 0L
+        private set
+
     private data class Model(override val descriptor: ModelDescriptor) : LoadedModel
 
     override suspend fun load(model: ModelDescriptor): LoadedModel {
@@ -72,6 +77,7 @@ class FakeBackend(
         reply.take(request.maxTokens).forEachIndexed { i, token ->
             if (i == failAfterTokens) throw Tune2AIException.BackendFailure("Scripted failure after $i tokens")
             delay(tokenDelayMillis)
+            if (i == 0) firstTokenNanos = System.nanoTime()
             emit(token)
         }
     }

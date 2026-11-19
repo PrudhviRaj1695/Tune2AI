@@ -6,7 +6,7 @@ import com.tune2ai.sdk.api.BackendInfo
  * The extension point for inference backends (FR-INF-4). Registration validates the backend's
  * identity and capabilities; see docs/backend-guide.md for writing one.
  */
-class BackendRegistry {
+internal class BackendRegistry {
     private val backends = LinkedHashMap<String, InferenceBackend>()
 
     val all: List<InferenceBackend> get() = backends.values.toList()

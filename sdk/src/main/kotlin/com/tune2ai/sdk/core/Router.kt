@@ -8,7 +8,7 @@ import com.tune2ai.sdk.api.Tune2AIException.NoCompatibleRoute
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.services.model.ModelManager
 
-data class Route(val model: ModelDescriptor, val backend: InferenceBackend)
+internal data class Route(val model: ModelDescriptor, val backend: InferenceBackend)
 
 /**
  * Picks a model and backend for a request (FR-ORC-2). Keeps no model state: availability and
@@ -16,7 +16,7 @@ data class Route(val model: ModelDescriptor, val backend: InferenceBackend)
  *
  * Order: explicit preference → an already loaded model → the smallest model that fits.
  */
-class Router(private val models: ModelManager) {
+internal class Router(private val models: ModelManager) {
 
     fun route(task: Task, options: RequestOptions): Route {
         options.backend?.let { id ->

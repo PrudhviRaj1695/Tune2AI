@@ -41,7 +41,7 @@ class WorkflowApi internal constructor(
     /** Problems with [definition] against the registered tools; an empty list means it is valid. */
     fun validate(definition: WorkflowDefinition): List<String> = engine.validate(definition)
 
-    /** Starts a run. Invalid definitions and missing inputs end the stream with a typed [Failed] event. */
+    /** Starts a run. Invalid definitions and missing inputs end the stream with a typed [Tune2AIEvent.Failed] event. */
     @JvmOverloads
     fun start(
         definition: WorkflowDefinition,

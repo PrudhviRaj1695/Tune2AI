@@ -24,7 +24,7 @@ import kotlinx.coroutines.withTimeout
  * through the [ToolCallingEngine]. Ends with exactly one terminal event: completed, cancelled,
  * limit reached ([Tune2AIException.LimitReached]), or failed.
  */
-class AgentEngine(
+internal class AgentEngine(
     private val controller: RequestController,
     private val tools: ToolCallingEngine,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
