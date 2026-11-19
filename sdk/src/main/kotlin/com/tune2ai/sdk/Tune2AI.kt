@@ -9,11 +9,13 @@ import com.tune2ai.sdk.api.ResourceLimits
 import com.tune2ai.sdk.api.ResourceSnapshot
 import com.tune2ai.sdk.api.Tool
 import com.tune2ai.sdk.api.Tune2AIException
+import com.tune2ai.sdk.api.WorkflowApi
 import com.tune2ai.sdk.core.Platform
 import com.tune2ai.sdk.core.RequestController
 import com.tune2ai.sdk.core.Router
 import com.tune2ai.sdk.core.agent.AgentEngine
 import com.tune2ai.sdk.core.tools.ToolCallingEngine
+import com.tune2ai.sdk.core.workflow.WorkflowEngine
 import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
@@ -50,8 +52,11 @@ class Tune2AI private constructor(
     private val ready = scope.async { manager.restore() }
     private val controller = RequestController(manager, Router(manager), ContextManager(prompts, defaultTemplate))
 
+    private val toolEngine = ToolCallingEngine(tools)
+
     val chat = ChatApi(controller, platform.storage, scope, ready)
-    val agent = AgentApi(AgentEngine(controller, ToolCallingEngine(tools)), scope, ready)
+    val agent = AgentApi(AgentEngine(controller, toolEngine), scope, ready)
+    val workflow = WorkflowApi(WorkflowEngine(controller, toolEngine, platform.storage), scope, ready)
     val models = ModelsApi(manager, scope, ready)
 
     /** Registered backends and whether each can run right now. */

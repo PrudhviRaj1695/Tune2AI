@@ -15,10 +15,15 @@ import com.tune2ai.sdk.api.Cancellable;
 import com.tune2ai.sdk.api.ModelDescriptor;
 import com.tune2ai.sdk.api.ModelInfo;
 import com.tune2ai.sdk.api.ModelState;
+import com.tune2ai.sdk.api.RequestId;
 import com.tune2ai.sdk.api.RequestOptions;
 import com.tune2ai.sdk.api.ResourceSnapshot;
 import com.tune2ai.sdk.api.Task;
 import com.tune2ai.sdk.api.Tune2AIEvent;
+import com.tune2ai.sdk.core.workflow.StepType;
+import com.tune2ai.sdk.core.workflow.Transition;
+import com.tune2ai.sdk.core.workflow.WorkflowDefinition;
+import com.tune2ai.sdk.core.workflow.WorkflowStep;
 import com.tune2ai.sdk.llama.LlamaBackend;
 import com.tune2ai.sdk.remote.RemoteBackend;
 
@@ -80,9 +85,16 @@ final class StudioBridge {
                     req.optInt("maxTokens", 512),
                     (float) req.optDouble("temperature", 0.7));
             String prompt = req.getString("prompt");
-            Cancellable handle = "Agent".equals(req.optString("mode"))
-                    ? ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event))
-                    : ai.getChat().session(SESSION).stream(prompt, options, event -> deliver(id, event));
+            String mode = req.optString("mode");
+            Cancellable handle;
+            if ("Agent".equals(mode)) {
+                handle = ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event));
+            } else if ("Workflow".equals(mode)) {
+                handle = ai.getWorkflow().stream(demoWorkflow(), Collections.singletonMap("input", prompt),
+                        options, new RequestId(id), event -> deliver(id, event));
+            } else {
+                handle = ai.getChat().session(SESSION).stream(prompt, options, event -> deliver(id, event));
+            }
             running.put(id, handle);
         } catch (JSONException e) {
             notice("Could not read the request: " + e.getMessage());
@@ -100,6 +112,21 @@ final class StudioBridge {
         for (Cancellable handle : running.values()) handle.cancel();
         running.clear();
         ai.getChat().session(SESSION).clearAsync();
+    }
+
+    /**
+     * The demo workflow for the Workflow tab: a {@code current_time} tool step whose output feeds a
+     * model step that answers the user's message. Shows a real multi-step run — tool call, variable
+     * passing, and a model answer — through {@code ai.workflow}, checkpointed to storage per step.
+     */
+    private WorkflowDefinition demoWorkflow() {
+        WorkflowStep time = new WorkflowStep("time", StepType.TOOL, null, "current_time", "{}", "now",
+                Collections.singletonList(new Transition("answer", null, null)));
+        WorkflowStep answer = new WorkflowStep("answer", StepType.MODEL,
+                "The current time is {now}.\n\nAnswer concisely: {input}", null, null, "answer",
+                Collections.emptyList());
+        return new WorkflowDefinition("studio-demo", 1,
+                Collections.singletonList("input"), java.util.Arrays.asList(time, answer));
     }
 
     /**

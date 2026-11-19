@@ -254,7 +254,7 @@ function renderMode() {
   $("#empty-title").textContent = needsModel ? "Add a model to start." : mode.title;
   $("#empty-copy").textContent = needsModel
     ? "Import a GGUF model from this phone. It runs fully on-device; nothing is sent anywhere."
-    : live && state.mode === "Workflow" ? `${mode.copy} Workflow runs are simulated until the Workflow API ships.` : mode.copy;
+    : mode.copy;
   els.prompt.placeholder = mode.placeholder;
   $("#suggestions").innerHTML = needsModel
     ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
@@ -467,7 +467,7 @@ function finishToolCard(msg, e) {
 }
 
 function run(text) {
-  const simulated = !live || state.mode === "Workflow";
+  const simulated = !live; // Workflow now runs the real ai.workflow API through the bridge (T2AI-043)
   state.hasRun = true;
   els.empty.hidden = true;
   addUserMessage(text);

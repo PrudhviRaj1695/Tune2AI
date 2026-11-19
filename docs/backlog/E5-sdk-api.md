@@ -58,7 +58,7 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 ### T2AI-043 — Publish the Workflow API
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 6 · **Requirements:** FR-SDK-6 · **Depends on:** T2AI-035, T2AI-036, T2AI-040
 
 **Story:** As an application developer, I want a Workflow API to define, start, inspect, cancel, and resume workflows.
@@ -70,8 +70,8 @@ Goal: the public surface app developers use. Everything here is a thin layer ove
 
 **Tasks**
 
-- [ ] T2AI-043.1 `api/WorkflowApi.kt`: `validate`, `start`, `status`, `cancel`, `resume`, `list`, `delete`.
-- [ ] T2AI-043.2 Tests: full lifecycle through the public API.
+- [x] T2AI-043.1 `api/WorkflowApi.kt`: `validate`, `start`, `status`, `cancel`, `resume`, `list`, `delete`.
+- [x] T2AI-043.2 Tests: full lifecycle through the public API.
 
 ### T2AI-044 — Publish the Model API
 

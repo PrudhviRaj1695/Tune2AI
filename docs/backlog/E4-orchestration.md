@@ -108,7 +108,7 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 ### T2AI-035 — Implement the workflow engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 6 · **Requirements:** FR-ORC-5 · **Depends on:** T2AI-030, T2AI-033
 
 **Story:** As an application developer, I want to define and execute workflows so that repeatable multi-step model and tool tasks run consistently.
@@ -122,14 +122,14 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-035.1 `core/workflow/WorkflowDefinition.kt` (Kotlin data classes; JSON form for persistence).
-- [ ] T2AI-035.2 `WorkflowValidator.kt`.
-- [ ] T2AI-035.3 `WorkflowEngine.kt`: step execution, variable passing between steps, transitions.
-- [ ] T2AI-035.4 Tests: linear workflow, branch, invalid definitions, cancel mid-run.
+- [x] T2AI-035.1 `core/workflow/WorkflowDefinition.kt` (Kotlin data classes; JSON form for persistence).
+- [x] T2AI-035.2 `WorkflowValidator.kt`.
+- [x] T2AI-035.3 `WorkflowEngine.kt`: step execution, variable passing between steps, transitions.
+- [x] T2AI-035.4 Tests: linear workflow, branch, invalid definitions, cancel mid-run.
 
 ### T2AI-036 — Add workflow persistence and recovery
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 6 · **Requirements:** FR-ORC-6 · **Depends on:** T2AI-004, T2AI-035
 
 **Story:** As an application developer, I want workflow state persisted so that a workflow resumes after process death when configured.
@@ -142,6 +142,6 @@ Goal: one request path (controller → router → Model Manager → inference) t
 
 **Tasks**
 
-- [ ] T2AI-036.1 Checkpoint format (run id, definition version, step index, outputs) in namespace `workflows`.
-- [ ] T2AI-036.2 `WorkflowEngine.resume(runId)`; refuse when the definition version changed.
-- [ ] T2AI-036.3 Tests: kill after step 2 (simulated), resume runs step 3 only; delete removes checkpoint.
+- [x] T2AI-036.1 Checkpoint format (run id, definition version, next step id, variables/outputs) in namespace `workflows`. (Next step **id**, not index: ids survive step reordering.)
+- [x] T2AI-036.2 `WorkflowEngine.resume(runId)`; refuse when the definition version changed.
+- [x] T2AI-036.3 Tests: kill after step 2 (simulated), resume runs step 3 only; delete removes checkpoint.
