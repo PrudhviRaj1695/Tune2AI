@@ -35,6 +35,7 @@ class MyBackend : InferenceBackend {
 | Errors | Throw `Tune2AIException`: an invalid or missing model is `ModelUnavailable`, a resource problem is `ResourceLimit`, anything else is `BackendFailure`. Never put credentials or user content in messages. |
 | Concurrency | The SDK may call `generate` concurrently on the same model. Serialize per model if the runtime is not thread-safe. |
 | Availability | Report device- or configuration-level problems through `unavailableReason`; models on an unavailable backend show as `Unavailable` with that reason, and routing explains it. |
+| Embeddings (optional) | To serve `Task.EMBEDDING`, list it in `capabilities.tasks` and override `embed(model, texts)`: one vector per text, in order, all the same length, ideally L2-normalised. Reject texts you cannot embed with a typed error; inputs beyond the model's context may be truncated. Backends that do not override it get a `NoCompatibleRoute` error. `LlamaBackend` loads a model registered with only `EMBEDDING` in `tasks` in embedding mode. |
 
 ## 3. Pass the contract tests
 

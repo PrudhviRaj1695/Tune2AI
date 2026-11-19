@@ -3,6 +3,7 @@ package com.tune2ai.sdk.inference
 import com.tune2ai.sdk.api.ChatMessage
 import com.tune2ai.sdk.api.ModelDescriptor
 import com.tune2ai.sdk.api.Task
+import com.tune2ai.sdk.api.Tune2AIException
 import kotlinx.coroutines.flow.Flow
 
 /** What a backend can run. Routing and the Model Manager use this; nothing else inspects backends. */
@@ -44,6 +45,13 @@ interface InferenceBackend {
     suspend fun unload(model: LoadedModel)
 
     fun generate(model: LoadedModel, request: GenerateRequest): Flow<String>
+
+    /**
+     * Optional (T2AI-023): one vector per text, in order, all the same length. Backends that list
+     * [Task.EMBEDDING] in their capabilities override this; the default says the operation is unsupported.
+     */
+    suspend fun embed(model: LoadedModel, texts: List<String>): List<FloatArray> =
+        throw Tune2AIException.NoCompatibleRoute("Backend '$id' does not support embeddings")
 }
 
 /** True if this backend supports [model]'s format and is allowed to run it (ignores availability). */

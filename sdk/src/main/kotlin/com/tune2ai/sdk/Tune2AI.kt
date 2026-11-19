@@ -20,9 +20,12 @@ import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
+import com.tune2ai.sdk.services.embedding.EmbeddingService
 import com.tune2ai.sdk.services.memory.MemoryContextSource
 import com.tune2ai.sdk.services.memory.MemoryEngine
 import com.tune2ai.sdk.services.model.ModelManager
+import com.tune2ai.sdk.services.rag.RagContextSource
+import com.tune2ai.sdk.services.rag.RagEngine
 import com.tune2ai.sdk.services.prompt.PromptManager
 import com.tune2ai.sdk.services.prompt.PromptTemplate
 import kotlinx.coroutines.CoroutineScope
@@ -59,9 +62,16 @@ class Tune2AI private constructor(
      * ponytail: one default memory session wired to context; route per request when multi-session memory lands.
      */
     val memory = MemoryEngine(platform.storage)
+    private val router = Router(manager)
+
+    /** Embeds text with a registered embedding model (a model whose `tasks` include EMBEDDING). */
+    val embeddings = EmbeddingService(manager, router)
+
+    /** Application knowledge retrieved into requests through the Context Manager (FR-SVC-5). Needs an embedding model. */
+    val rag = RagEngine(platform.storage, embeddings)
     private val controller = RequestController(
-        manager, Router(manager),
-        ContextManager(prompts, defaultTemplate, listOf(MemoryContextSource(memory, DEFAULT_SESSION))),
+        manager, router,
+        ContextManager(prompts, defaultTemplate, listOf(MemoryContextSource(memory, DEFAULT_SESSION), RagContextSource(rag))),
     )
 
     private val toolEngine = ToolCallingEngine(tools)

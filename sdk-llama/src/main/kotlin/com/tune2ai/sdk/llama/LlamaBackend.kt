@@ -31,12 +31,12 @@ class LlamaBackend(
     private val threads: Int = defaultThreads(),
 ) : InferenceBackend {
     override val id = ID
-    override val capabilities = BackendCapabilities(formats = setOf("gguf"), tasks = setOf(Task.CHAT))
+    override val capabilities = BackendCapabilities(formats = setOf("gguf"), tasks = setOf(Task.CHAT, Task.EMBEDDING))
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private val native = Dispatchers.IO.limitedParallelism(2)
 
-    private class Model(override val descriptor: ModelDescriptor, val handle: Long) : LoadedModel {
+    private class Model(override val descriptor: ModelDescriptor, val handle: Long, val embedding: Boolean) : LoadedModel {
         val lock = Mutex()
     }
 
@@ -44,13 +44,15 @@ class LlamaBackend(
         val file = File(model.path)
         if (!file.isFile) throw Tune2AIException.ModelUnavailable("Model file not found: ${model.path}")
         if (!isGguf(file)) throw Tune2AIException.ModelUnavailable("Not a GGUF model file: ${model.path}")
+        // A model registered only for embeddings is loaded in embedding mode; any model that can chat loads for chat.
+        val embedding = Task.EMBEDDING in model.tasks && Task.CHAT !in model.tasks
         val handle = try {
-            LlamaNative.load(file.path, model.contextLength, threads)
+            LlamaNative.load(file.path, model.contextLength, threads, embedding)
         } catch (e: UnsatisfiedLinkError) {
             throw Tune2AIException.BackendFailure("llama.cpp native library is missing for this device ABI", e)
         }
         if (handle == 0L) throw Tune2AIException.ModelUnavailable("llama.cpp could not load ${file.name} (unsupported architecture or not enough memory)")
-        Model(model, handle)
+        Model(model, handle, embedding)
     }
 
     override suspend fun unload(model: LoadedModel) {
@@ -58,8 +60,23 @@ class LlamaBackend(
         m.lock.withLock { withContext(native) { LlamaNative.free(m.handle) } }
     }
 
+    /** ponytail: not interruptible mid-call; inputs are short, so cancel lands between texts. */
+    override suspend fun embed(model: LoadedModel, texts: List<String>): List<FloatArray> {
+        val m = model as Model
+        if (!m.embedding) {
+            throw Tune2AIException.InvalidRequest("${m.descriptor.name} was loaded for chat; register it with tasks = {EMBEDDING} only to embed")
+        }
+        return m.lock.withLock {
+            texts.map { text ->
+                withContext(native) { LlamaNative.embed(m.handle, text) }
+                    ?: throw Tune2AIException.BackendFailure("llama.cpp could not embed the text with ${m.descriptor.name}")
+            }
+        }
+    }
+
     override fun generate(model: LoadedModel, request: GenerateRequest): Flow<String> = channelFlow {
         val m = model as Model
+        if (m.embedding) throw Tune2AIException.InvalidRequest("${m.descriptor.name} is an embedding model and cannot generate text")
         m.lock.withLock {
             val prompt = withContext(native) {
                 LlamaNative.applyTemplate(

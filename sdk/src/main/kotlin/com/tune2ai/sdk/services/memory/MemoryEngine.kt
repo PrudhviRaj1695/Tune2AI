@@ -1,6 +1,8 @@
 package com.tune2ai.sdk.services.memory
 
 import com.tune2ai.sdk.core.Storage
+import com.tune2ai.sdk.services.embedding.Embedder
+import com.tune2ai.sdk.services.embedding.cosine
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlin.random.Random
@@ -8,11 +10,6 @@ import kotlin.random.Random
 /** One remembered fact. [id] is stable; [createdAt] gives a deterministic order and tie-break. */
 @Serializable
 data class MemoryEntry(val id: String, val text: String, val createdAt: Long)
-
-/** Turns text into a vector for similarity search. Supplied once the embedding service exists (T2AI-023). */
-fun interface Embedder {
-    suspend fun embed(text: String): FloatArray
-}
 
 /**
  * Explicit, per-session memory (FR-SVC-6) stored in the `memory/<session>` namespace. Sessions are
@@ -89,12 +86,5 @@ class MemoryEngine(
 
         fun tokenize(text: String): Set<String> =
             text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length > 1 }.toSet()
-
-        fun cosine(a: FloatArray, b: FloatArray): Double {
-            require(a.size == b.size) { "Embedding dimensions differ: ${a.size} vs ${b.size}" }
-            var dot = 0.0; var na = 0.0; var nb = 0.0
-            for (i in a.indices) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i] }
-            return if (na == 0.0 || nb == 0.0) 0.0 else dot / (Math.sqrt(na) * Math.sqrt(nb))
-        }
     }
 }

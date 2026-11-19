@@ -33,7 +33,8 @@ Run setup → **Remote** takes any OpenAI-compatible API (base URL ending in `/v
 | 7 | Ask for a long story, tap Stop | Status "Cancelled" within about half a second; partial text stays; logcat `stop=cancelled` |
 | 8 | Kill and relaunch the app, ask again | The model is still registered; the conversation history is still used |
 | 9 | Tap New session | Chat, trace, and stored history are cleared |
-| 10 | Switch to Agent or Workflow | Replies are marked "Simulated" until those APIs ship |
+| 10 | Switch to Workflow and send a message | A "Called current_time" card (the demo workflow's tool step), then a model answer; no "Simulated" badge. The Memory and RAG switches in Run setup are still simulated |
+| 15 | Edit the system prompt in Run setup, send a message | The trace shows "Prompt · custom"; Reset restores the default |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
 | 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |

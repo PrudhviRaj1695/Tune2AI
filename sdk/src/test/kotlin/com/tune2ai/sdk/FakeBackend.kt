@@ -22,8 +22,14 @@ class FakeBackend(
     var failAfterTokens: Int? = null,
     var unavailable: String? = null,
     network: Boolean = false,
+    /** Non-null makes this an embedding backend producing vectors of this size (a hashed bag of words). */
+    val embedDims: Int? = null,
 ) : InferenceBackend {
-    override val capabilities = BackendCapabilities(formats, setOf(Task.CHAT), requiresNetwork = network)
+    override val capabilities = BackendCapabilities(
+        formats,
+        if (embedDims == null) setOf(Task.CHAT) else setOf(Task.CHAT, Task.EMBEDDING),
+        requiresNetwork = network,
+    )
     override val unavailableReason: String? get() = unavailable
     var loads = 0
         private set
@@ -46,6 +52,17 @@ class FakeBackend(
         unloads++
     }
 
+    var embedCalls = 0
+        private set
+
+    override suspend fun embed(model: LoadedModel, texts: List<String>): List<FloatArray> {
+        val dims = embedDims ?: return super.embed(model, texts)
+        embedCalls++
+        return texts.map { text ->
+            FloatArray(dims).also { v -> text.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }.forEach { v[Math.floorMod(it.hashCode(), dims)] += 1f } }
+        }
+    }
+
     /** Scripted replies: each generate call takes the next one; when empty, [tokens] is used. */
     val script = ArrayDeque<List<String>>()
 
@@ -66,4 +83,5 @@ fun fakeModel(
     format: String = "fake",
     path: String = "/models/$id.$format",
     contextLength: Int = 4096,
-) = ModelDescriptor(id, id.replaceFirstChar { it.uppercase() }, format, path, (memoryGb * GB).toLong(), contextLength)
+    tasks: Set<Task> = setOf(Task.CHAT),
+) = ModelDescriptor(id, id.replaceFirstChar { it.uppercase() }, format, path, (memoryGb * GB).toLong(), contextLength, tasks)

@@ -66,7 +66,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 ### T2AI-023 — Provide embedding and reranking services
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 7 · **Requirements:** FR-SVC-4 · **Depends on:** T2AI-010, T2AI-020
 
 **Story:** As an application developer, I want text embedding and optional reranking so that stored content can be searched for relevant context.
@@ -79,13 +79,13 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-023.1 Add `embed` to the inference capabilities (optional operation) and implement it in `:sdk-llama`.
-- [ ] T2AI-023.2 `services/embedding/EmbeddingService.kt` and `Reranker.kt` (interface; default implementation = cosine re-score).
-- [ ] T2AI-023.3 Tests: dimension mismatch error, stable ordering for equal scores.
+- [x] T2AI-023.1 Add `embed` to the inference capabilities (optional operation) and implement it in `:sdk-llama`. (JNI `embed` + an `embedding` load mode; device-verified with all-MiniLM-L6-v2 Q8_0.)
+- [x] T2AI-023.2 `services/embedding/EmbeddingService.kt` and `Reranker.kt` (interface; default implementation = cosine re-score). (`Embedder` moved here from memory so `EmbeddingService` can back memory search.)
+- [x] T2AI-023.3 Tests: dimension mismatch error, stable ordering for equal scores. (JVM: `EmbeddingTest`; device: `EmbeddingDeviceTest`, which needs `adb push <embedding>.gguf /data/local/tmp/tune2ai-embed.gguf` and is skipped without it.)
 
 ### T2AI-024 — Implement the RAG engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 7 · **Requirements:** FR-SVC-5 · **Depends on:** T2AI-004, T2AI-022, T2AI-023
 
 **Story:** As an application developer, I want to add, update, delete, and retrieve content so that model requests can use application knowledge.
@@ -99,11 +99,11 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-024.1 `services/rag/Chunker.kt` (fixed token windows with overlap).
-- [ ] T2AI-024.2 `services/rag/VectorIndex.kt` brute-force cosine over vectors in `Storage` (D5), with a `ponytail:` note on the corpus-size ceiling.
-- [ ] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve.
-- [ ] T2AI-024.4 `RagContextSource` registered with the Context Manager.
-- [ ] T2AI-024.5 Tests: update replaces, delete removes, top-k ordering.
+- [x] T2AI-024.1 `services/rag/Chunker.kt` (fixed token windows with overlap).
+- [x] T2AI-024.2 `services/rag/VectorIndex.kt` brute-force cosine over vectors in `Storage` (D5), with a `ponytail:` note on the corpus-size ceiling. (Each chunk records the embedding model that made it; searching with a different model fails with a typed error.)
+- [x] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve.
+- [x] T2AI-024.4 `RagContextSource` registered with the Context Manager (in `Tune2AI`, with `Tune2AI.rag` and `Tune2AI.embeddings` exposed).
+- [x] T2AI-024.5 Tests: update replaces, delete removes, top-k ordering. (JVM: `RagTest`; device: `EmbeddingDeviceTest.ragRetrievesBySemanticsAndHonoursUpdateAndDelete` on the real SQLite storage.)
 
 ### T2AI-025 — Implement the memory engine
 

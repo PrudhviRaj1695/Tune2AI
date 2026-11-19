@@ -3,7 +3,7 @@ package com.tune2ai.sdk
 import com.tune2ai.sdk.api.RequestOptions
 import com.tune2ai.sdk.core.InMemoryStorage
 import com.tune2ai.sdk.services.context.ContextManager
-import com.tune2ai.sdk.services.memory.Embedder
+import com.tune2ai.sdk.services.embedding.Embedder
 import com.tune2ai.sdk.services.memory.MemoryContextSource
 import com.tune2ai.sdk.services.memory.MemoryEngine
 import com.tune2ai.sdk.services.prompt.PromptManager

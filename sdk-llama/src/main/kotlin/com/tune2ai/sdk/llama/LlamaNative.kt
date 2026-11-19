@@ -11,7 +11,8 @@ internal object LlamaNative {
         System.loadLibrary("tune2ai_llama")
     }
 
-    @JvmStatic external fun load(path: String, contextLength: Int, threads: Int): Long
+    /** [embedding] loads the model for [embed] only (embedding output on, whole-context batches). */
+    @JvmStatic external fun load(path: String, contextLength: Int, threads: Int, embedding: Boolean): Long
 
     /** The chat formatted with the model's own template, or null if llama.cpp does not support it. */
     @JvmStatic external fun applyTemplate(handle: Long, roles: Array<String>, contents: Array<String>): String?
@@ -25,6 +26,9 @@ internal object LlamaNative {
         seed: Int,
         sink: TokenSink,
     ): String?
+
+    /** The L2-normalised embedding of [text], or null on failure. Input beyond the context is truncated. */
+    @JvmStatic external fun embed(handle: Long, text: String): FloatArray?
 
     @JvmStatic external fun cancel(handle: Long)
 

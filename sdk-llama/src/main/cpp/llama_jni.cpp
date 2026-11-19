@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace {
 struct Session {
     llama_model * model = nullptr;
     llama_context * ctx = nullptr;
+    bool embedding = false; // loaded for embeddings (T2AI-023): embed() only, no generation
     std::atomic<bool> cancel{false};
     // Tokens currently in the KV cache (sequence 0, positions 0..n-1). A new prompt that starts with
     // the same tokens (chat history, agent steps) only processes what is new.
@@ -87,7 +89,7 @@ JNIEXPORT jint JNI_OnLoad(JavaVM *, void *) {
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads) {
+Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads, jboolean embedding) {
     auto mparams = llama_model_default_params();
     mparams.n_gpu_layers = 0;
     llama_model * model = llama_model_load_from_file(str(env, path).c_str(), mparams);
@@ -98,6 +100,12 @@ Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, 
     cparams.n_batch = std::min<uint32_t>(512, (uint32_t) n_ctx);
     cparams.n_threads = n_threads;
     cparams.n_threads_batch = n_threads;
+    if (embedding) {
+        // Embedding models read the whole input in one pass, so a batch must hold a full context.
+        cparams.embeddings = true;
+        cparams.n_batch = (uint32_t) n_ctx;
+        cparams.n_ubatch = (uint32_t) n_ctx;
+    }
     llama_context * ctx = llama_init_from_model(model, cparams);
     if (!ctx) {
         llama_model_free(model);
@@ -106,6 +114,7 @@ Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, 
     auto * s = new Session();
     s->model = model;
     s->ctx = ctx;
+    s->embedding = embedding;
     // Lets cancellation interrupt long prompt processing, not only the token loop.
     llama_set_abort_callback(ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
     return reinterpret_cast<jlong>(s);
@@ -243,6 +252,52 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
     env->DeleteLocalRef(sink_class);
     if (env->ExceptionCheck()) return nullptr; // let the Kotlin exception propagate
     return error ? env->NewStringUTF(error) : nullptr;
+}
+
+// The L2-normalised embedding of text (pooled per the model's own pooling type), or null on failure.
+// Input longer than the context is truncated to it.
+JNIEXPORT jfloatArray JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_embed(JNIEnv * env, jclass, jlong handle, jstring text_j) {
+    Session * s = session(handle);
+    if (!s->embedding) return nullptr;
+    s->cancel.store(false);
+
+    const llama_vocab * vocab = llama_model_get_vocab(s->model);
+    const std::string text = str(env, text_j);
+    const int32_t n_text = -llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), nullptr, 0, true, false);
+    if (n_text <= 0) return nullptr;
+    std::vector<llama_token> tokens(n_text);
+    if (llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), tokens.data(), n_text, true, false) < 0) return nullptr;
+    const int32_t n_ctx = (int32_t) llama_n_ctx(s->ctx);
+    if ((int32_t) tokens.size() > n_ctx) tokens.resize(n_ctx);
+
+    if (llama_memory_t mem = llama_get_memory(s->ctx)) llama_memory_clear(mem, true); // encoder-only models have none
+
+    llama_batch_ext * batch = llama_batch_ext_init(s->ctx);
+    for (int32_t i = 0; i < (int32_t) tokens.size(); ++i) {
+        const int32_t idx = llama_batch_ext_add_token(batch, 0, tokens[i]);
+        const llama_pos pos = i;
+        llama_batch_ext_set_pos(batch, idx, &pos);
+        llama_batch_ext_set_output_embd(batch, idx, true);
+    }
+    const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+    llama_batch_ext_free(batch);
+    if (rc != 0) return nullptr;
+
+    const float * embd = llama_get_embeddings_seq(s->ctx, 0);
+    if (!embd) embd = llama_get_embeddings_ith(s->ctx, -1); // pooling type NONE: last token
+    if (!embd) return nullptr;
+
+    const int32_t n_embd = llama_model_n_embd_out(s->model);
+    double norm = 0.0;
+    for (int32_t i = 0; i < n_embd; ++i) norm += (double) embd[i] * embd[i];
+    norm = norm > 0.0 ? std::sqrt(norm) : 1.0;
+    std::vector<float> out(n_embd);
+    for (int32_t i = 0; i < n_embd; ++i) out[i] = (float) (embd[i] / norm);
+
+    jfloatArray result = env->NewFloatArray(n_embd);
+    env->SetFloatArrayRegion(result, 0, n_embd, out.data());
+    return result;
 }
 
 JNIEXPORT void JNICALL
