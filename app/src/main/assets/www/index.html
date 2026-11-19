@@ -134,8 +134,9 @@
               <fieldset class="group">
                 <legend>Prompt Manager</legend>
                 <div class="prompt-card">
-                  <div class="prompt-card-head"><strong>Helpful assistant</strong><span>v3</span></div>
-                  <code>Be concise, accurate, and use supplied context when relevant.</code>
+                  <div class="prompt-card-head"><strong>System prompt</strong><button class="prompt-reset" type="button" id="system-prompt-reset">Reset</button></div>
+                  <label class="sr-only" for="system-prompt">System prompt</label>
+                  <textarea id="system-prompt" rows="3" spellcheck="false">Be concise, accurate, and use supplied context when relevant.</textarea>
                 </div>
               </fieldset>
             </div>

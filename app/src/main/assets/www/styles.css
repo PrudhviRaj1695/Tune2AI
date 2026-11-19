@@ -382,6 +382,13 @@ input[role="switch"]:disabled, .segmented input:disabled + span { opacity: .45; 
 .prompt-card-head { display: flex; justify-content: space-between; margin-bottom: 8px; color: #fff; font-size: 14px; }
 .prompt-card-head span { padding: 0 8px; border-radius: 99px; background: rgb(255 255 255 / .1); font: 600 12px/20px var(--mono); }
 .prompt-card code { display: block; font: 13px/1.55 var(--mono); }
+.prompt-card textarea { display: block; width: 100%; box-sizing: border-box; resize: vertical; min-height: 60px;
+  padding: 8px 10px; border: 1px solid rgb(255 255 255 / .18); border-radius: 10px;
+  background: rgb(255 255 255 / .06); color: var(--code-ink); font: 13px/1.55 var(--mono); }
+.prompt-card textarea:focus { outline: none; border-color: rgb(255 255 255 / .45); }
+.prompt-reset { padding: 0 10px; border: 0; border-radius: 99px; background: rgb(255 255 255 / .1);
+  color: #fff; font: 600 12px/20px var(--mono); cursor: pointer; }
+.prompt-reset:hover { background: rgb(255 255 255 / .18); }
 
 /* Trace content */
 .status {

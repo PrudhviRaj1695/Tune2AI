@@ -15,6 +15,7 @@ const REMOTE_TPS = 88;
    bridge, and replies come from simulate() with the same event shapes. */
 const bridge = window.Tune2AIBridge || null;
 const live = Boolean(bridge);
+const DEFAULT_SYSTEM = "Be concise, accurate, and use supplied context when relevant.";
 const NO_MODEL = { name: "No model yet", short: "No model", backend: "llama.cpp", mono: "—", size: "", memory: "—", memoryPct: 0, tps: 0 };
 const currentModel = () => {
   if (live && state.execution === "remote") {
@@ -158,8 +159,10 @@ function loadLiveModels() {
 }
 
 function contextItems() {
+  const sys = $("#system-prompt")?.value.trim();
+  const edited = sys && sys !== DEFAULT_SYSTEM;
   return [
-    { label: "Prompt v3", detail: "Helpful assistant v3" },
+    { label: edited ? "Prompt · custom" : "Prompt v3", detail: sys || "Helpful assistant v3" },
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
     !live && state.rag && { label: "RAG", detail: "RAG sources · 3 chunks" },
@@ -182,6 +185,11 @@ $("#remote-save").addEventListener("click", () => {
   $("#remote-key").value = "";
   $("#remote-key").placeholder = "Saved · kept in memory only";
   toast("Remote endpoint saved.");
+});
+
+$("#system-prompt-reset").addEventListener("click", () => {
+  $("#system-prompt").value = DEFAULT_SYSTEM;
+  if (state.hasRun) renderMode();
 });
 
 /* Trace labels for the SDK's context sources, e.g. "prompt:helpful-assistant@3". */
@@ -384,6 +392,7 @@ function liveSource(prompt, emit) {
     backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),
     maxTokens: Number($("#max-tokens").value),
+    system: $("#system-prompt").value.trim(),
   }));
   return () => {
     liveListeners.delete(id);

@@ -15,6 +15,7 @@ data class RequestId(val value: String) {
 /**
  * Options shared by chat, agent, and workflow requests. Null preferences mean automatic selection.
  *
+ * @param system a free-text system prompt that overrides the default/named template when non-blank.
  * @param promptTemplate id of a registered prompt template to use as the system prompt; null uses the default.
  * @param promptVariables values for the template's declared variables.
  */
@@ -24,6 +25,7 @@ data class RequestOptions @JvmOverloads constructor(
     val deadlineMillis: Long = 120_000,
     val maxTokens: Int = 512,
     val temperature: Float = 0.7f,
+    val system: String? = null,
     val promptTemplate: String? = null,
     val promptVariables: Map<String, String> = emptyMap(),
 )

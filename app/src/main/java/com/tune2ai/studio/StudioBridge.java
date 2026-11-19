@@ -78,12 +78,14 @@ final class StudioBridge {
         try {
             JSONObject req = new JSONObject(requestJson);
             String id = req.getString("id");
+            String system = req.optString("system", "").trim();
             RequestOptions options = new RequestOptions(
                     req.isNull("model") ? null : req.getString("model"),
                     req.isNull("backend") ? null : req.getString("backend"),
                     120_000L,
                     req.optInt("maxTokens", 512),
-                    (float) req.optDouble("temperature", 0.7));
+                    (float) req.optDouble("temperature", 0.7),
+                    system.isEmpty() ? null : system);
             String prompt = req.getString("prompt");
             String mode = req.optString("mode");
             Cancellable handle;

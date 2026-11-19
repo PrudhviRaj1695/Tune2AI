@@ -37,7 +37,11 @@ class ContextManager(
         val budget = model.contextLength - options.maxTokens
 
         val systemParts = mutableListOf<String>()
-        (options.promptTemplate ?: defaultTemplate)?.let { id ->
+        val custom = options.system?.takeIf { it.isNotBlank() }
+        if (custom != null) {
+            systemParts += custom
+            included += "prompt:custom"
+        } else (options.promptTemplate ?: defaultTemplate)?.let { id ->
             val template = prompts.get(id)
             systemParts += template.render(options.promptVariables)
             included += "prompt:${template.ref}"

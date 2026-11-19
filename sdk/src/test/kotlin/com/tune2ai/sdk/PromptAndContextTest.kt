@@ -71,6 +71,18 @@ class PromptAndContextTest {
     }
 
     @Test
+    fun aCustomSystemPromptOverridesTheDefaultTemplate() = runTest {
+        val context = ContextManager(prompts, "assistant")
+        val result = context.assemble(
+            listOf(ChatMessage.user("Hi")), fakeModel(),
+            RequestOptions(maxTokens = 64, system = "You are a pirate. Reply in pirate speak."),
+        )
+        assertEquals("You are a pirate. Reply in pirate speak.", result.messages.first().content)
+        assertTrue(result.included.contains("prompt:custom"))
+        assertTrue(result.included.none { it.startsWith("prompt:assistant") }) // the default template is replaced
+    }
+
+    @Test
     fun trimsOldestTurnsToFitAndReportsIt() = runTest {
         val context = ContextManager(prompts, "assistant", countTokens = { 100 })
         val turns = List(10) { if (it % 2 == 0) ChatMessage.user("q$it") else ChatMessage.assistant("a$it") } + ChatMessage.user("latest")
