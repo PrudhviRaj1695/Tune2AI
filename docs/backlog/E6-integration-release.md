@@ -45,6 +45,29 @@ Goal: Tune2AI Studio becomes the real Android sample, then docs and versioned pa
 - [x] T2AI-054.3 Run setup UI for the three fields; enable the Remote option.
 - [x] T2AI-054.4 Manual test against a local OpenAI-compatible server on the development machine via `10.0.2.2` (debug builds allow cleartext to it only): wrong key shows "rejected the API key (HTTP 401)"; right key streams the reply with the remote route in the trace.
 
+### T2AI-055 — Read-only insights from user-shared transaction messages
+
+- **Status:** In progress
+- **Milestone:** 9 · **Requirements:** FR-APP-3 · **Depends on:** T2AI-050
+
+**Story:** As a Studio user, I want to share transaction messages or a statement CSV and ask questions about the summarized activity, without granting inbox access or allowing the agent to move money.
+
+**Acceptance criteria**
+
+- Studio accepts messages only when the user explicitly shares them and can import a local CSV statement.
+- Raw message text is not retained; the finance tool exposes only aggregated totals to the local agent.
+- The finance agent is read-only, routes through the on-device backend, and can be cleared by the user.
+- No SMS, notification, or contacts permission is requested.
+
+**Tasks**
+
+- [x] T2AI-055.1 Add an Android `ACTION_SEND` text share target and process shared text on-device.
+- [x] T2AI-055.2 Extract clear debit/credit amounts, aggregate by currency, and expose only the aggregate through `finance_summary`.
+- [x] T2AI-055.3 Add the Finance Studio mode, CSV import, and a local-only finance agent.
+- [x] T2AI-055.4 Clear aggregate data and cancel finance runs on explicit clear or SDK shutdown; request no inbox permissions.
+- [x] T2AI-055.5 Document and verify the APK, emulator share/clear flow, and absence of SMS/contacts permissions (manual checks are in `app/README.md`).
+- [ ] T2AI-055.6 Verify CSV import and a finance question route through llama.cpp on the emulator, including when Remote is selected.
+
 ### T2AI-051 — Provide an iOS sample
 
 - **Status:** Todo

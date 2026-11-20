@@ -86,6 +86,7 @@ IDs are stable; stories reference them. "Must" items block v1; "Should" items ma
 |---|---|---|---|
 | FR-APP-1 | Studio uses only public SDK APIs and replaces its simulated replies with real streamed output. | Must | T2AI-050 |
 | FR-APP-2 | Studio shows loading, resource-limit, cancellation, and error states. | Must | T2AI-050 |
+| FR-APP-3 | Studio provides user-shared, read-only local finance insights without inbox permissions. | Should | T2AI-055 |
 | FR-REL-1 | Versioned Android packages with a backend compatibility matrix, docs, and release notes. | Must | T2AI-052, T2AI-053 |
 
 ## 5. Non-functional requirements

@@ -17,8 +17,9 @@ const bridge = window.Tune2AIBridge || null;
 const live = Boolean(bridge);
 const DEFAULT_SYSTEM = "Be concise, accurate, and use supplied context when relevant.";
 const NO_MODEL = { name: "No model yet", short: "No model", backend: "llama.cpp", mono: "—", size: "", memory: "—", memoryPct: 0, tps: 0 };
+const isRemoteRun = () => state.execution === "remote" && state.mode !== "Finance";
 const currentModel = () => {
-  if (live && state.execution === "remote") {
+  if (live && isRemoteRun()) {
     const r = state.remoteModel;
     return r
       ? { ...NO_MODEL, name: r.name, short: r.name.length > 18 ? `${r.name.slice(0, 17)}…` : r.name, backend: "Remote API", mono: "API" }
@@ -39,11 +40,18 @@ const MODES = {
       : `Prompts and outputs never leave this phone: ${c.backend} runs ${c.model} locally, so there is no server to log data and replies keep working offline.\n\nThe trade-off is device headroom. The Model Manager checks free memory before loading, and the Device Resource Monitor can unload idle models under pressure so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
   },
   Agent: {
-    title: "Give an agent a task. See every tool call.",
-    copy: "Agents run bounded steps with tools your app registers, and stop at the limits you set.",
+    title: "Check whether this device is ready to run a model.",
+    copy: "The readiness advisor checks live device resources and model memory estimates, then explains which installed models appear safe to load.",
     placeholder: "Describe a task for the agent…",
-    suggestions: ["How much free memory does this device have?", "Which models are installed, and is one loaded?", "Check device headroom before loading a second model"],
-    reply: () => `Done in 3 of 6 allowed steps.\n\n1 · resource_monitor → 3.6 GB free, thermal nominal\n2 · list_models → 1 loaded, 1 ready\n3 · Drafted the plan below\n\nLoading a second model fits now, but unload it when the app goes to the background. Every tool input was validated against its schema before it ran.`,
+    suggestions: ["Is my device ready to load another model?", "Which installed models appear safe to run?", "Check the device's memory, battery, and thermal state"],
+    reply: () => `I checked the current device resources and the installed models' memory estimates. Models marked “appears safe to load” fit the SDK's current resource limits at the time of the check.\n\nThis is an estimate, not a guarantee: available memory and thermal state can change before loading. I did not load or unload any model.`,
+  },
+  Finance: {
+    title: "Understand spending from messages you choose to share.",
+    copy: "In your messaging app, select transaction alerts and choose Share → Tune2AI Studio. Only aggregated totals stay in memory; finance questions always use an on-device model. A bank CSV can also be imported.",
+    placeholder: "Ask about spending, income, or category totals…",
+    suggestions: ["Where does most of my spending go?", "How much came in versus went out?", "What is the net amount in this statement?"],
+    reply: () => "Finance insights are available in the Android app after you share transaction messages or import a statement CSV.",
   },
   Workflow: {
     title: "Chain model and tool steps into one run.",
@@ -54,7 +62,7 @@ const MODES = {
   },
 };
 
-const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null };
+const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null, financeSummary: null };
 const els = {
   conversation: $("#conversation"),
   empty: $("#empty-state"),
@@ -135,6 +143,22 @@ function renderModels() {
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-import]")) bridge?.importModel();
 });
+$("#finance-import").addEventListener("click", () => bridge?.importFinanceCsv());
+$("#finance-clear").addEventListener("click", () => {
+  if (state.mode === "Finance") state.run?.cancel();
+  state.financeSummary = null;
+  bridge?.clearFinance();
+  $$(".msg[data-mode='Finance']").forEach((message) => message.remove());
+  state.hasRun = $$(".msg").length > 0;
+  state.sources = null;
+  if (!state.hasRun) els.empty.hidden = false;
+  renderMode();
+  renderRuntime();
+  renderTimeline(routeSteps());
+  setStatus("idle", "Idle");
+  setMetrics();
+  toast("Shared finance summary cleared from this app session.");
+});
 
 function loadLiveModels() {
   const all = JSON.parse(bridge.listModels());
@@ -166,6 +190,10 @@ function contextItems() {
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
     !live && state.rag && { label: "RAG", detail: "RAG sources · 3 chunks" },
+    state.mode === "Finance" && state.financeSummary && {
+      label: `Shared data · ${state.financeSummary.transactionCount} items`,
+      detail: "Only aggregated category totals are included; raw messages are not stored",
+    },
   ].filter(Boolean);
 }
 
@@ -203,14 +231,16 @@ function describeSource(source) {
 
 function renderRuntime() {
   const model = currentModel();
-  const remote = state.execution === "remote";
+  const remote = isRemoteRun();
   const chip = $("#model-chip");
   $("#model-chip-label").textContent = model.short;
   chip.toggleAttribute("data-remote", remote);
   $(".model-chip-kind use", chip).setAttribute("href", remote ? "#i-cloud" : "#i-chip");
   chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change run setup`);
   $("#rail-backend").textContent = remote ? "Remote API" : `${model.backend} · Android`;
-  $("#execution-hint").textContent = remote
+  $("#execution-hint").textContent = state.mode === "Finance"
+    ? "Finance questions always use llama.cpp on this phone. Shared message text is not sent to a remote endpoint."
+    : remote
     ? live ? remoteHint() : "Sent to the Remote API backend over HTTPS. Same route, same events."
     : "Runs on this phone. Nothing leaves the device.";
   $("#remote-form").hidden = !(live && remote);
@@ -264,6 +294,9 @@ function renderMode() {
     ? "Import a GGUF model from this phone. It runs fully on-device; nothing is sent anywhere."
     : mode.copy;
   els.prompt.placeholder = mode.placeholder;
+  $("#finance-import").hidden = !(live && state.mode === "Finance");
+  $("#finance-import").textContent = "Import statement CSV";
+  $("#finance-clear").hidden = !(live && state.mode === "Finance" && state.financeSummary);
   $("#suggestions").innerHTML = needsModel
     ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
     : mode.suggestions.map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
@@ -289,7 +322,7 @@ const ROUTE_LABELS = ["API", "Controller", "Router", "Context", "Inference"];
 
 function routeSteps() {
   const model = currentModel();
-  const remote = state.execution === "remote";
+  const remote = isRemoteRun();
   const context = contextItems().map((i) => i.label).join(" + ");
   return [
     { name: `${state.mode} API`, detail: "Request received" },
@@ -388,8 +421,8 @@ function liveSource(prompt, emit) {
     id,
     prompt,
     mode: state.mode,
-    model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
-    backend: state.execution === "remote" ? "remote" : null,
+    model: isRemoteRun() ? state.remoteModel?.id ?? null : state.model || null,
+    backend: isRemoteRun() ? "remote" : state.mode === "Finance" ? "llama.cpp" : null,
     temperature: Number($("#temperature").value),
     maxTokens: Number($("#max-tokens").value),
     system: $("#system-prompt").value.trim(),
@@ -403,6 +436,14 @@ function liveSource(prompt, emit) {
 window.tune2ai = {
   onEvent: (e) => liveListeners.get(e.id)?.(e),
   onModelsChanged: () => loadLiveModels(),
+  onFinanceSummary: (summary) => {
+    state.financeSummary = summary;
+    state.mode = "Finance";
+    renderMode();
+    renderRuntime();
+    const count = summary.transactionCount || 0;
+    toast(`Ready to analyze ${count} transaction${count === 1 ? "" : "s"}. Only aggregated totals are kept in memory.`);
+  },
   onNotice: (text) => toast(text),
 };
 
@@ -417,6 +458,7 @@ function stickToBottom(fn) {
 function addUserMessage(text) {
   const msg = document.createElement("div");
   msg.className = "msg msg-user";
+  msg.dataset.mode = state.mode;
   const bubble = document.createElement("p");
   bubble.className = "bubble";
   bubble.textContent = text;
@@ -428,10 +470,11 @@ function addAssistantMessage(simulated) {
   const model = currentModel();
   const msg = document.createElement("article");
   msg.className = "msg";
+  msg.dataset.mode = state.mode;
   msg.innerHTML = `
     <div class="msg-head">
       <svg class="avatar" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="url(#brand-gradient)" /><path d="M6 17c2 0 2-6 4-6s2 10 4 10 2-13 4-13 2 9 4 9 2-4 4-4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      <strong>Tune2AI</strong><span>${state.execution === "remote" ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
+      <strong>Tune2AI</strong><span>${isRemoteRun() ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
     </div>
     <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l, i) => `${i ? '<span class="route-link"></span>' : ""}<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
     <div class="tools"></div>
@@ -476,6 +519,8 @@ function finishToolCard(msg, e) {
 }
 
 function run(text) {
+  if (state.mode === "Finance" && !live) return toast("Share transaction messages to Tune2AI Studio on Android to use Finance insights.");
+  if (state.mode === "Finance" && !state.financeSummary) return toast("Share transaction messages or import a statement CSV first.");
   const simulated = !live; // Workflow now runs the real ai.workflow API through the bridge (T2AI-043)
   state.hasRun = true;
   els.empty.hidden = true;
@@ -485,7 +530,7 @@ function run(text) {
   const answer = $(".answer", msg);
   const steps = routeSteps();
   const model = currentModel();
-  const remote = state.execution === "remote";
+  const remote = isRemoteRun();
   const requestId = `req_${crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, "0")}`;
   let firstMs = null;
 
@@ -594,6 +639,8 @@ $("#composer").addEventListener("submit", (event) => {
 $("#new-session").addEventListener("click", () => {
   state.run?.cancel();
   bridge?.newSession();
+  bridge?.clearFinance();
+  state.financeSummary = null;
   $$(".msg", els.conversation).forEach((m) => m.remove());
   els.empty.hidden = false;
   $("#request-id").textContent = "No runs yet";
@@ -605,6 +652,7 @@ $("#new-session").addEventListener("click", () => {
   setMetrics();
   $("#trace-dot").hidden = true;
   els.prompt.value = "";
+  renderMode();
   updateSend();
   toast("New session started.");
 });

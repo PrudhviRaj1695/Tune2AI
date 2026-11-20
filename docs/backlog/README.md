@@ -12,7 +12,7 @@ Requirements: [../requirements.md](../requirements.md). Architecture and decisio
 | E3 — AI services | [E3-ai-services.md](E3-ai-services.md) | T2AI-020–025 |
 | E4 — AI orchestration core | [E4-orchestration.md](E4-orchestration.md) | T2AI-030–036 |
 | E5 — Developer SDK APIs | [E5-sdk-api.md](E5-sdk-api.md) | T2AI-040–044 |
-| E6 — Integration and release | [E6-integration-release.md](E6-integration-release.md) | T2AI-050–054 |
+| E6 — Integration and release | [E6-integration-release.md](E6-integration-release.md) | T2AI-050–055 |
 
 ## Milestones
 

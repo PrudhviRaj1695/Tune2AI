@@ -147,6 +147,7 @@
               <div class="tabs" role="tablist" aria-label="Request type">
                 <button role="tab" type="button" aria-selected="true" data-mode="Chat">Chat</button>
                 <button role="tab" type="button" aria-selected="false" data-mode="Agent">Agent</button>
+                <button role="tab" type="button" aria-selected="false" data-mode="Finance">Finance</button>
                 <button role="tab" type="button" aria-selected="false" data-mode="Workflow">Workflow</button>
               </div>
               <button class="model-chip" type="button" data-open="setup" id="model-chip">
@@ -172,6 +173,8 @@
               <textarea id="prompt" rows="1" placeholder="Message Tune2AI…" enterkeyhint="send"></textarea>
               <div class="composer-row">
                 <button class="icon-button small" type="button" data-soon="Attachments arrive with the RAG engine (T2AI-024)." aria-label="Attach file"><svg class="icon"><use href="#i-clip" /></svg></button>
+                <button class="finance-action" type="button" id="finance-import" hidden>Import statement CSV</button>
+                <button class="finance-action finance-clear" type="button" id="finance-clear" hidden>Forget</button>
                 <div class="context-pills" id="context-pills" aria-label="Context in this request"></div>
                 <button class="send" type="submit" id="send" aria-label="Run request"><svg class="icon"><use href="#i-arrow-up" /></svg></button>
               </div>

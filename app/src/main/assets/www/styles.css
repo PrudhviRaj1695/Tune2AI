@@ -275,6 +275,9 @@ h1, h2, h3, p { margin: 0; }
 .context-pills::-webkit-scrollbar { display: none; }
 .context-pills .chip { flex: none; height: 28px; }
 .context-pills .icon { width: 14px; height: 14px; }
+.finance-action { flex: none; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 600; }
+.finance-action:hover { border-color: var(--accent); color: var(--ink); }
+.finance-clear { color: var(--ink-3); }
 .send {
   display: grid; place-items: center; width: 40px; height: 40px; flex: none;
   border: 0; border-radius: 50%; background: var(--accent); color: var(--accent-ink);

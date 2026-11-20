@@ -37,14 +37,23 @@ Run setup → **Remote** takes any OpenAI-compatible API (base URL ending in `/v
 | 15 | Edit the system prompt in Run setup, send a message | The trace shows "Prompt · custom"; Reset restores the default |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
-| 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |
+| 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Is my device ready to load another model?" | A `runtime_readiness` call reports resource signals and per-model estimates; the answer explains the recommendation and does not load or unload a model |
+| 16 | In the messaging app, select transaction alerts and Share → Tune2AI Studio; ask Finance "What does this tell me?" | Finance opens with the aggregate count; the `finance_summary` tool card contains totals and categories but no raw message text, and the request routes through llama.cpp even if Remote is selected |
+| 17 | Share `INR 1,250.00 debited at Metro Groceries` to Studio | Finance reports one transaction, spending of INR 1,250.00 in Groceries, and no retained message text |
+| 18 | In Finance, import a UTF-8 CSV with date, description, and signed amount columns | Finance reports aggregated income, spending, net, and category totals; original rows are not shown to the agent |
+| 19 | Select Remote, ask a Finance question, then tap Forget and ask again | The trace reports llama.cpp; Forget removes the shared summary and the next question asks for data |
+| 20 | Inspect the merged APK permissions | No SMS, contacts, or notification access permission is present |
 | 13 | Run setup → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.
 
 ## Agent tools
 
-Studio registers three demo tools in `MainActivity`: `device_status`, `list_models`, and `current_time`. Agents need a model that follows tool-calling instructions; SmolLM2-135M usually does not, Qwen2.5-0.5B-Instruct or larger does. Keep tool results small and plainly labelled: small models misread raw fields.
+Studio's Agent tab is a device and model readiness advisor. It calls `runtime_readiness`, which combines current free memory, battery and thermal signals with each installed model's memory estimate and SDK state. It only advises; it does not load or unload models. The report is a point-in-time estimate, so the device can change before a model is loaded.
+
+Studio's Finance tab accepts transaction messages explicitly shared from another app, or a bank statement CSV. Studio does not read the inbox and requests no SMS permission. It processes shared text in memory, discards descriptions, and exposes only income/spending/category totals through the `finance_summary` tool. Finance runs use a one-shot agent request pinned to the on-device `llama.cpp` backend, even when Remote is selected; no finance summary is stored in chat history. **Forget** or **New session** clears the summary from app memory. CSV support expects UTF-8 with date and description columns plus a signed amount, or separate debit and credit columns. Amounts without a reliable direction are excluded and counted as unclassified.
+
+Studio also registers `device_status`, `list_models`, and `current_time` as examples of app-provided tools. Agents need a model that follows tool-calling instructions; SmolLM2-135M usually does not, Qwen2.5-0.5B-Instruct or larger does. Keep tool results small and plainly labelled: small models misread raw fields.
 
 ## Debugging the page
 
