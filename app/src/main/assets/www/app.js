@@ -50,16 +50,7 @@ const MODES = {
     suggestions: ["Summarize → classify → draft a reply to a support ticket", "Translate, check tone, then shorten", "Extract action items from meeting notes"],
     reply: () => `Workflow finished: 3 of 3 steps.\n\nSummarize → 2 sentences\nClassify → "billing question"\nDraft reply → 86 words, friendly tone\n\nEach step was checkpointed to local storage, so this run could resume after an app restart without repeating completed steps.`,
   },
-  /* Finance is a Chat preset: same Chat API, finance-focused starters. Figures stay on the device. */
-  Finance: {
-    title: "Your money, on-device.",
-    copy: "Ask about budgets, spending, and plans. Nothing you type leaves this phone.",
-    placeholder: "Ask about budgets or spending…",
-    suggestions: ["Build a monthly budget from a ₹60,000 salary", "Explain the 50/30/20 rule with an example", "Split savings between an emergency fund and investments"],
-    reply: (c) => `A simple starting point is 50/30/20: half of take-home pay for needs, 30% for wants, and 20% for savings and debt.\n\nOn ₹60,000 that is ₹30,000 for rent, food, and bills, ₹18,000 for everything else, and ₹12,000 saved. Build an emergency fund of three to six months of needs first, then invest the rest.\n\nThis ran on ${c.model}, so your figures never left the phone.`,
-  },
 };
-const apiName = (mode) => (mode === "Finance" ? "Chat" : mode);
 
 const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null };
 const els = {
@@ -287,7 +278,7 @@ function routeSteps() {
   const remote = state.execution === "remote";
   const context = contextItems().map((i) => i.label).join(" + ");
   return [
-    { name: `${apiName(state.mode)} API`, detail: "Request received" },
+    { name: `${state.mode} API`, detail: "Request received" },
     { name: "Request Controller", detail: `Validated · deadline ${live ? 120 : 30} s` },
     { name: "Model & Task Router", detail: remote ? `Remote API · ${model.short}` : `${model.backend} · ${model.short}` },
     { name: "Context Manager", detail: context },
@@ -382,7 +373,7 @@ function liveSource(prompt, emit) {
   bridge.send(JSON.stringify({
     id,
     prompt,
-    mode: apiName(state.mode),
+    mode: state.mode,
     model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
     backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),

@@ -33,7 +33,7 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 7 | Ask for a long story, tap Stop | Status "Cancelled" within about half a second; partial text stays; logcat `stop=cancelled` |
 | 8 | Kill and relaunch the app, ask again | The model is still registered; the conversation history is still used |
 | 9 | Tap New session (pencil icon) | Chat, trace, and stored history are cleared |
-| 10 | Switch to Workflow | Replies are marked "Simulated" until the Workflow API ships. Finance is a Chat preset and runs through the Chat API |
+| 10 | Switch to Workflow | Replies are marked "Simulated" until the Workflow API ships. |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
 | 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |
