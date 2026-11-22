@@ -36,6 +36,28 @@ How retrieval works: documents are split into ~200-token chunks along paragraphs
 
 Search works right away by keyword (BM25). **Search by meaning** downloads BGE small (37 MB, an embedding model); Studio then re-indexes existing documents so search also finds passages that say the same thing in other words. **Try a search** shows exactly which passages a question would retrieve.
 
+## Connections
+
+The **Connections** tab lets the model use data already on the phone. Each connection asks for its own permission when you tap Connect, reads its data through Android's content providers, and indexes it into the same knowledge index as Sources (it does not appear in the Sources document list). Connected data re-syncs when Studio starts if the last sync is over an hour old, or on demand with the refresh button. Disconnect deletes everything it indexed.
+
+| Connection | Permission | What gets indexed |
+|---|---|---|
+| Internal storage | All files access (system settings) | Text, Markdown, Word, PDF (Android 15+), CSV, code, HTML anywhere in shared storage including Download; skips Android/, DCIM, Pictures, Movies, Music, hidden folders; up to 3,000 files |
+| App notifications | Notification access (system settings) | Notifications from other apps (WhatsApp, Gmail, Slack, …) received after access is granted; newest 500 |
+| Messages | READ_SMS (+ contacts for names) | 40 most recent SMS conversations, 60 messages each |
+| Calendar | READ_CALENDAR | Events 30 days back to 90 days ahead, one document per month with a heading per day; includes Google Calendar |
+| Contacts | READ_CONTACTS | Names, phones, emails, companies, dates; includes Google Contacts |
+| Call history | READ_CALL_LOG | 300 most recent calls |
+| Installed apps | none | Apps with a launcher icon and their install dates |
+
+Google Drive is reachable through Sources → Files or Folder (choose Drive in the picker); Gmail through App notifications or Share. Gmail and Drive APIs themselves would need a Google Cloud OAuth client, which Studio does not have.
+
+The system prompt (v5) includes today's date and time, so "what's on Friday?" or "what did Mom text yesterday?" resolve against the indexed dates.
+
+Notes: on Android 13+, a sideloaded app may need **App info → ⋮ → Allow restricted settings** before notification access can be turned on. SMS and call-log permissions are restricted on Google Play; they are fine for this debug build but need a policy declaration (or removal) before a Play release.
+
+Why a folder may fail to add: Android's folder picker does not allow the storage root, **Download**, or Android/ ("Can't use this folder"). Pick a subfolder, or use Connections → Internal storage. While a large folder is listed, the progress card shows "Scanning… N files found"; the final message says how many files were added, unchanged, skipped (not text or over 4 MB), or PDFs skipped (before Android 15).
+
 ## Replies
 
 Replies render Markdown as they stream: headings, lists (nested and checklists), tables, code blocks with a Copy button, quotes, and bold or italic text. All HTML from the model is escaped. The system prompt (v4) asks for this structure. When an answer used your sources, citation markers like [1] are tappable and open the exact passage the model was given; numbered source chips sit under the reply. Each reply has Copy (plain text) and Ask again.
@@ -75,6 +97,11 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 21 | Try a search: a word that is in no document | "No passage matches" |
 | 22 | Ask "Compare tea and coffee in a table" | A bordered table, not pipe characters; code questions show a code block with Copy |
 | 23 | With test 15's note, tap the [1] in the answer | The passage card opens under the reply with "Parking"; tap again to close |
+| 25 | Sources → Folder → pick Download | Android itself refuses ("Can't use this folder"); Connections → Internal storage → Allow → grant All files access → back | Progress "Scanning… N files found", then Download's documents are indexed |
+| 26 | Connections → Calendar → Connect → allow. Ask "What's on my calendar this week?" | Answer lists this week's events with [n] citations to "Calendar — <month>" |
+| 27 | Connections → Messages → Connect. Ask "What did <name> text me last?" | Answer quotes the latest SMS from that contact, cited |
+| 28 | Connections → App notifications → Allow → enable in settings → back. Receive a WhatsApp message, tap refresh, ask about it | The message is found |
+| 29 | Disconnect any connection | Its items disappear; questions about it no longer cite it |
 | 24 | Sources → Strict, ask something only loosely related to a document | Fewer or no "Sources" chips than with Loose |
 | 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 

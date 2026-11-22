@@ -37,6 +37,13 @@
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4" /></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></symbol>
       <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2" /><path d="M15.5 8.5V6.2a1.7 1.7 0 0 0-1.7-1.7H6.2a1.7 1.7 0 0 0-1.7 1.7v7.6c0 .9.8 1.7 1.7 1.7h2.3" /></symbol>
+      <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z" /><path d="M10 20.5a2 2 0 0 0 4 0" /></symbol>
+      <symbol id="i-message" viewBox="0 0 24 24"><path d="M4.5 6.5a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5v-3.5h0a1 1 0 0 1-1-1z" /></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="4" y="5.5" width="16" height="14.5" rx="2.2" /><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4" /></symbol>
+      <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.5" /><path d="M5 19.5a7 7 0 0 1 14 0" /></symbol>
+      <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.5 4h3l1.5 4-2 1.3a10 10 0 0 0 5.7 5.7l1.3-2 4 1.5v3a2 2 0 0 1-2.2 2A16 16 0 0 1 4.5 6.2 2 2 0 0 1 6.5 4z" /></symbol>
+      <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="6" height="6" rx="1.6" /><rect x="13.5" y="4.5" width="6" height="6" rx="1.6" /><rect x="4.5" y="13.5" width="6" height="6" rx="1.6" /><rect x="13.5" y="13.5" width="6" height="6" rx="1.6" /></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.5v5.5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z" /><path d="M9 12l2.2 2.2L15.5 10" /></symbol>
       <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></symbol>
     </svg>
 
@@ -56,6 +63,7 @@
       <nav class="view-tabs" role="tablist" aria-label="Studio">
         <button role="tab" type="button" data-view="chat" aria-selected="true" aria-controls="chat-view">Chat</button>
         <button role="tab" type="button" data-view="sources" aria-selected="false" aria-controls="sources-view">Sources<span class="tab-count" id="sources-count" hidden></span></button>
+        <button role="tab" type="button" data-view="connections" aria-selected="false" aria-controls="connections-view">Connections<span class="tab-count" id="connections-count" hidden></span></button>
       </nav>
 
       <main class="chat" id="chat-view" aria-label="Conversation">
@@ -120,7 +128,7 @@
           <div class="card list">
             <div class="list-row">
               <span class="row-icon"><svg class="icon"><use href="#i-folder" /></svg></span>
-              <span class="model-text"><strong>Folder</strong><small>Every text, Markdown, Word, CSV, code, or HTML file inside it. Kept in sync.</small></span>
+              <span class="model-text"><strong>Folder</strong><small>Every text, Markdown, Word, PDF, CSV, code, or HTML file inside it. Kept in sync. Android does not let apps pick Download or the whole storage here: use Connections → Internal storage for those.</small></span>
               <button class="pill-button" type="button" data-k="folder">Add</button>
             </div>
             <div class="list-row">
@@ -163,6 +171,22 @@
               <input id="search-input" type="search" placeholder="Ask something your files answer" enterkeyhint="search" autocomplete="off" />
             </form>
             <div id="search-results"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Connections: data on the phone (storage, messages, calendar, apps) indexed as context -->
+      <section class="sources" id="connections-view" aria-label="Connections" hidden>
+        <div class="sources-scroll">
+          <header class="sources-hero">
+            <h2>Connections</h2>
+            <p>Let the model use what is already on your phone. Each connection asks for permission, is read and indexed on the device, and can be removed at any time.</p>
+          </header>
+          <div id="connections-progress"></div>
+          <div id="connections-groups"></div>
+          <div class="card privacy-card">
+            <span class="row-icon"><svg class="icon"><use href="#i-shield" /></svg></span>
+            <span class="model-text"><strong>Stays on this phone</strong><small>Connected data is indexed in Studio's private storage and only used to answer your questions here. Disconnecting deletes it from the index.</small></span>
           </div>
         </div>
       </section>
@@ -222,7 +246,7 @@
 
         <fieldset class="group">
           <legend>System prompt</legend>
-          <div class="card prompt-card">You are a helpful assistant running privately on the user's phone. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, <b>bold</b> for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.</div>
+          <div class="card prompt-card">You are a helpful assistant running privately on the user's phone. It is now <i>today's date and time</i>. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, <b>bold</b> for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.</div>
         </fieldset>
 
         <fieldset class="group">

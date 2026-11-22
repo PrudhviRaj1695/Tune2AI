@@ -17,6 +17,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Collections;
 import java.util.Date;
 
 import com.tune2ai.sdk.Tune2AI;
@@ -30,7 +31,7 @@ import com.tune2ai.sdk.services.prompt.PromptTemplate;
 
 public final class MainActivity extends Activity {
     private static final String PAGE_ROOT = "file:///android_asset/www/";
-    static final String SYSTEM_PROMPT = "You are a helpful assistant running privately on the user's phone. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, **bold** for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.";
+    static final String SYSTEM_PROMPT = "You are a helpful assistant running privately on the user's phone. It is now {{today}}. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, **bold** for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.";
 
     private WebView webView;
     private Tune2AI ai;
@@ -44,8 +45,9 @@ public final class MainActivity extends Activity {
         ai = new Tune2AI.Builder(this)
                 .addBackend(new LlamaBackend())
                 .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
-                // v4: asks for Markdown structure, which Studio renders (lists, tables, code).
-                .addPromptTemplate(new PromptTemplate("helpful-assistant", 4, SYSTEM_PROMPT))
+                // v5: asks for Markdown structure (Studio renders it) and knows the date, so questions about
+                // "today" or "next Friday" over calendar and message sources make sense.
+                .addPromptTemplate(new PromptTemplate("helpful-assistant", 5, SYSTEM_PROMPT, Collections.singleton("today")))
                 .defaultPromptTemplate("helpful-assistant")
                 // Demo tools for Agent mode. Handlers run on a background thread.
                 .addTool(new Tool("device_status",
@@ -100,6 +102,23 @@ public final class MainActivity extends Activity {
         }
         webView.loadUrl(PAGE_ROOT + "index.html");
         if (savedInstanceState == null) bridge.onShare(getIntent()); // launched from another app's Share sheet
+    }
+
+    /** The {{today}} prompt variable, e.g. "Sunday 22 November 2026, 14:05". */
+    static String today() {
+        return new java.text.SimpleDateFormat("EEEE d MMMM yyyy, HH:mm", java.util.Locale.getDefault()).format(new Date());
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        bridge.onPermissionsResult(requestCode, permissions, grantResults);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (bridge != null) bridge.onResume(); // back from system settings (all files / notification access)
     }
 
     @Override

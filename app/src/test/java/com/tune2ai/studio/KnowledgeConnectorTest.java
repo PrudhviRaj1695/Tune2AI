@@ -19,6 +19,16 @@ public class KnowledgeConnectorTest {
     }
 
     @Test
+    public void supportedTypesIncludeDocumentsButNotMedia() {
+        assertTrue(KnowledgeConnector.supported("Report.PDF", null));
+        assertTrue(KnowledgeConnector.supported("notes.md", null));
+        assertTrue(KnowledgeConnector.supported("letter.docx", null));
+        assertTrue(KnowledgeConnector.supported("README", "text/plain"));
+        assertFalse(KnowledgeConnector.supported("holiday.jpg", "image/jpeg"));
+        assertFalse(KnowledgeConnector.supported("song.mp3", null));
+    }
+
+    @Test
     public void extensionIsLowercasedAndOptional() {
         assertEquals("md", KnowledgeConnector.extension("Notes.MD"));
         assertEquals("docx", KnowledgeConnector.extension("a.b.docx"));

@@ -261,9 +261,119 @@ function showView(view) {
   $$(".view-tabs [role=tab]").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.view === view)));
   $("#chat-view").hidden = view !== "chat";
   $("#sources-view").hidden = view !== "sources";
+  $("#connections-view").hidden = view !== "connections";
   if (view === "sources") loadKnowledge();
+  if (view === "connections") loadConnections();
 }
 $$(".view-tabs [role=tab]").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+/* ---------- Connections: phone data (storage, messages, calendar, contacts, apps) as context ----------
+   Each connection is read by StudioBridge/Connections.java and indexed into the same knowledge index
+   as Sources, so chat retrieves from it the same way. */
+const CONNECTION_GROUPS = [
+  { id: "phone", title: "On this phone" },
+  { id: "apps", title: "Other apps" },
+  { id: "google", title: "Google" },
+];
+const PREVIEW_CONNECTIONS = {
+  sdk: 35,
+  indexing: null,
+  connections: [
+    { id: "storage", name: "Internal storage", description: "Documents, notes, PDFs, and other text files anywhere in the phone's storage, including Download.", icon: "i-folder", group: "phone", granted: true, enabled: true, settings: true, lastSync: Date.now() - 18e5, items: 214 },
+    { id: "notifications", name: "App notifications", description: "New messages from WhatsApp, Gmail, Slack, Telegram, and any other app, as they arrive.", icon: "i-bell", group: "apps", granted: false, enabled: false, settings: true, lastSync: 0, items: 0 },
+    { id: "sms", name: "Messages", description: "Your SMS conversations, newest first.", icon: "i-message", group: "phone", granted: false, enabled: false, settings: false, lastSync: 0, items: 0 },
+    { id: "calendar", name: "Calendar", description: "Events from 30 days ago to 90 days ahead, including Google Calendar.", icon: "i-calendar", group: "google", granted: true, enabled: true, settings: false, lastSync: Date.now() - 3e5, items: 4 },
+    { id: "contacts", name: "Contacts", description: "Names, numbers, emails, and companies, including Google Contacts.", icon: "i-person", group: "google", granted: false, enabled: false, settings: false, lastSync: 0, items: 0 },
+    { id: "calls", name: "Call history", description: "Recent calls with who, when, and how long.", icon: "i-phone", group: "phone", granted: false, enabled: false, settings: false, lastSync: 0, items: 0 },
+    { id: "apps", name: "Installed apps", description: "Which apps are on this phone and when they were installed.", icon: "i-grid", group: "phone", granted: true, enabled: false, settings: false, lastSync: 0, items: 0 },
+  ],
+};
+let connections = null;
+
+function loadConnections() {
+  connections = live ? JSON.parse(bridge.connectionsStatus()) : connections || structuredClone(PREVIEW_CONNECTIONS);
+  renderConnections();
+}
+
+function connectionRow(c) {
+  const on = c.enabled && c.granted;
+  const status = on
+    ? `<span class="conn-status is-on">Connected</span> · ${c.items} ${c.id === "storage" ? "files" : "items"}${c.lastSync ? ` · synced ${ago(c.lastSync)}` : ""}`
+    : c.enabled && !c.granted ? `<span class="conn-status is-warn">Permission was removed</span>` : escapeHtml(c.description);
+  const busy = !!connections.indexing;
+  const actions = on
+    ? `<button class="icon-button small" type="button" data-sync="${c.id}" aria-label="Sync ${escapeHtml(c.name)} now" ${busy ? "disabled" : ""}>${svgIcon("i-refresh")}</button>
+       <button class="icon-button small" type="button" data-disconnect="${c.id}" aria-label="Disconnect ${escapeHtml(c.name)}">${svgIcon("i-close")}</button>`
+    : `<button class="pill-button" type="button" data-connect="${c.id}" ${busy ? "disabled" : ""}>${c.settings && !c.granted ? "Allow" : "Connect"}</button>`;
+  return `
+    <div class="list-row conn-row${on ? " is-on" : ""}">
+      <span class="row-icon">${svgIcon(c.icon)}</span>
+      <span class="model-text"><strong>${escapeHtml(c.name)}</strong><small>${status}</small></span>
+      ${actions}
+    </div>`;
+}
+
+function renderConnections() {
+  if (!connections) return;
+  const ix = connections.indexing;
+  $("#connections-progress").innerHTML = ix ? `
+    <div class="card progress-card">
+      <div class="progress-head"><strong>${escapeHtml(ix.label)}…</strong><span>${ix.total ? `${ix.done} of ${ix.total}` : ""}</span></div>
+      <div class="meter"><span style="width:${ix.total ? (ix.done / ix.total) * 100 : 5}%"></span></div>
+      ${ix.current ? `<small>${escapeHtml(ix.current)}</small>` : ""}
+    </div>` : "";
+  const extra = {
+    google: `
+      <div class="list-row conn-note">
+        <span class="row-icon">${svgIcon("i-file")}</span>
+        <span class="model-text"><strong>Google Drive</strong><small>Sources → Files or Folder, then choose Drive in the picker.</small></span>
+        <button class="pill-button" type="button" data-goto-view="sources">Open</button>
+      </div>
+      <div class="list-row conn-note">
+        <span class="row-icon">${svgIcon("i-message")}</span>
+        <span class="model-text"><strong>Gmail</strong><small>New mail arrives through App notifications; share a whole email with Share → Tune2AI Studio.</small></span>
+      </div>`,
+    apps: `
+      <div class="list-row conn-note">
+        <span class="row-icon">${svgIcon("i-share")}</span>
+        <span class="model-text"><strong>Anything else</strong><small>In any app, tap Share → Tune2AI Studio to add a page, note, or file.</small></span>
+      </div>`,
+  };
+  $("#connections-groups").innerHTML = CONNECTION_GROUPS.map((g) => `
+    <h3 class="label">${g.title}</h3>
+    <div class="card list">${connections.connections.filter((c) => c.group === g.id).map(connectionRow).join("")}${extra[g.id] || ""}</div>`).join("");
+  const n = connections.connections.filter((c) => c.enabled && c.granted).length;
+  const count = $("#connections-count");
+  count.hidden = !n;
+  count.textContent = n;
+}
+
+/* Preview only: pretend to grant access and sync. */
+function previewConnect(id) {
+  const c = connections.connections.find((x) => x.id === id);
+  connections.indexing = { label: `Syncing ${c.name.toLowerCase()}`, done: 0, total: 0, current: "Reading…" };
+  renderConnections();
+  setTimeout(() => {
+    Object.assign(c, { granted: true, enabled: true, lastSync: Date.now(), items: { sms: 38, contacts: 1, calls: 1, apps: 1, notifications: 6 }[id] || 12 });
+    connections.indexing = null;
+    renderConnections();
+    toast(`${c.name} connected.`);
+  }, 900);
+}
+
+document.addEventListener("click", (event) => {
+  const connect = event.target.closest("[data-connect]")?.dataset.connect;
+  const disconnect = event.target.closest("[data-disconnect]")?.dataset.disconnect;
+  const sync = event.target.closest("[data-sync]")?.dataset.sync;
+  const gotoView = event.target.closest("[data-goto-view]")?.dataset.gotoView;
+  if (connect) live ? bridge.connect(connect) : previewConnect(connect);
+  if (sync) live ? bridge.syncConnection(sync) : previewConnect(sync);
+  if (disconnect) {
+    if (live) bridge.disconnect(disconnect);
+    else { Object.assign(connections.connections.find((x) => x.id === disconnect), { enabled: false, items: 0, lastSync: 0 }); renderConnections(); }
+  }
+  if (gotoView) showView(gotoView);
+});
 
 /* ---------- Sources: files and apps the model can search (RAG through the SDK's knowledge API) ----------
    In a browser preview there is no bridge; a sample index stands in. */
@@ -472,7 +582,7 @@ function loadLiveModels() {
 
 function contextItems() {
   return [
-    { label: "Prompt v4", detail: "Helpful assistant v4" },
+    { label: "Prompt v5", detail: "Helpful assistant v5 (with today's date)" },
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
     knowledge?.enabled && knowledge.sources.length && { label: "Sources", detail: `Your sources · best ${knowledge.embeddingModel ? "matches" : "keyword matches"}, up to 3` },
@@ -718,6 +828,7 @@ window.tune2ai = {
   onNotice: (text) => toast(text),
   onDownload: (e) => onDownload(e),
   onKnowledgeChanged: () => loadKnowledge(),
+  onConnectionsChanged: () => { if (state.view === "connections" || connections) loadConnections(); },
   onOpenSources: () => showView("sources"),
 };
 
@@ -963,7 +1074,7 @@ function run(text) {
   const previewCited = !live && knowledge?.enabled && /lisbon|flight|trip/i.test(text) && knowledge.sources.some((src) => src.name === "Lisbon trip.md");
   const stop = simulated
     ? simulate(previewCited
-      ? { text: "Your flight leaves **Friday at 07:40** from **Terminal 2** [1].\n\n- Check-in closes **45 minutes** before departure [1]\n- Hotel check-in is after **15:00** [1]\n\nWant a reminder the evening before?", sources: ["prompt:helpful-assistant@4", "rag:Lisbon trip.md#2-3"], remote, tps: model.tps || 40 }
+      ? { text: "Your flight leaves **Friday at 07:40** from **Terminal 2** [1].\n\n- Check-in closes **45 minutes** before departure [1]\n- Hotel check-in is after **15:00** [1]\n\nWant a reminder the evening before?", sources: ["prompt:helpful-assistant@5", "rag:Lisbon trip.md#2-3"], remote, tps: model.tps || 40 }
       : { text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps || 40 }, onEvent)
     : liveSource(text, onEvent);
   state.run = { cancel: () => { stop(); finish("cancelled"); } };
@@ -1025,6 +1136,7 @@ if (live) {
 }
 if (!live) loadDevice();
 loadKnowledge();
+loadConnections();
 if (live && bridge.takeOpenSources()) showView("sources");
 renderModels();
 renderRuntime();

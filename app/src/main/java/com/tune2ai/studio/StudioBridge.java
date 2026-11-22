@@ -54,6 +54,7 @@ final class StudioBridge {
     static final int IMPORT_REQUEST = 41;
     static final int FOLDER_REQUEST = 42;
     static final int FILES_REQUEST = 43;
+    static final int CONNECT_REQUEST = 44;
     private static final String SESSION = "studio";
     private static final int CONTEXT_LENGTH = ModelAdvisor.CONTEXT_LENGTH;
     private static final String REMOTE_MODEL_ID = "remote-model";
@@ -71,6 +72,8 @@ final class StudioBridge {
     private final KnowledgeConnector connector;
     private final ExecutorService indexer = Executors.newSingleThreadExecutor();
     private volatile JSONObject indexing; // current indexing progress, or null
+    private final Connections connections;
+    private volatile String pendingConnect; // connection waiting for a permission answer or a settings visit
 
     StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote) {
         this.activity = activity;
@@ -79,6 +82,8 @@ final class StudioBridge {
         this.remote = remote;
         this.modelsDir = new File(activity.getFilesDir(), "models");
         this.connector = new KnowledgeConnector(activity, ai.getKnowledge());
+        this.connections = new Connections(activity, ai.getKnowledge(), connector);
+        indexer.execute(this::syncDueConnections);
         android.content.SharedPreferences prefs = activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE);
         ai.getKnowledge().setEnabled(prefs.getBoolean("enabled", true));
         ai.getKnowledge().setPassagesPerAnswer(prefs.getInt("passages", 3));
@@ -97,7 +102,9 @@ final class StudioBridge {
                     req.isNull("backend") ? null : req.getString("backend"),
                     120_000L,
                     req.optInt("maxTokens", 512),
-                    (float) req.optDouble("temperature", 0.7));
+                    (float) req.optDouble("temperature", 0.7),
+                    null,
+                    Collections.singletonMap("today", MainActivity.today()));
             String prompt = req.getString("prompt");
             Cancellable handle = "Agent".equals(req.optString("mode"))
                     ? ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event))
@@ -379,6 +386,7 @@ final class StudioBridge {
             JSONArray list = new JSONArray();
             for (com.tune2ai.sdk.api.KnowledgeSource src : sources) {
                 Map<String, String> meta = src.getMetadata();
+                if (meta.containsKey("connector")) continue;
                 list.put(new JSONObject()
                         .put("id", src.getId())
                         .put("name", src.getName())
@@ -391,6 +399,8 @@ final class StudioBridge {
                         .put("smart", src.getEmbeddingModel() != null));
             }
             o.put("sources", list);
+            o.put("total", sources.size());
+            o.put("pdf", KnowledgeConnector.pdfSupported());
         } catch (JSONException ignored) {
             // values above are always valid
         }
@@ -429,6 +439,129 @@ final class StudioBridge {
         } catch (JSONException e) {
             return "null";
         }
+    }
+
+    // ---------- Connections tab ----------
+
+    /** Every connection with its access, on/off state, last sync, and how many documents it indexed. */
+    @JavascriptInterface
+    public String connectionsStatus() {
+        JSONObject o = new JSONObject();
+        try {
+            Map<String, Integer> counts = connections.counts();
+            int storageFiles = 0;
+            for (com.tune2ai.sdk.api.KnowledgeSource src : ai.getKnowledge().sourcesBlocking()) {
+                if (KnowledgeConnector.STORAGE_SCOPE.equals(src.getMetadata().get("folder"))) storageFiles++;
+            }
+            JSONArray list = new JSONArray();
+            for (Connections.Spec spec : Connections.ALL) {
+                int items = spec.id.equals("storage") ? storageFiles : counts.getOrDefault(spec.id, 0);
+                list.put(new JSONObject()
+                        .put("id", spec.id).put("name", spec.name).put("description", spec.description)
+                        .put("icon", spec.icon).put("group", spec.group)
+                        .put("granted", connections.granted(spec))
+                        .put("enabled", connections.enabled(spec.id))
+                        .put("settings", connections.runtimePermissions(spec) == null)
+                        .put("lastSync", connections.lastSync(spec.id))
+                        .put("items", items));
+            }
+            o.put("connections", list);
+            o.put("indexing", indexing == null ? JSONObject.NULL : indexing);
+            o.put("sdk", Build.VERSION.SDK_INT);
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        return o.toString();
+    }
+
+    /** Turns a connection on: asks for access if needed, then indexes its data. */
+    @JavascriptInterface
+    public void connect(String id) {
+        Connections.Spec spec = Connections.spec(id);
+        if (spec == null) return;
+        if (connections.granted(spec)) {
+            connections.setEnabled(id, true);
+            syncConnection(id);
+            return;
+        }
+        pendingConnect = id;
+        String[] perms = connections.runtimePermissions(spec);
+        activity.runOnUiThread(() -> {
+            if (perms != null) {
+                activity.requestPermissions(perms, CONNECT_REQUEST);
+            } else {
+                try {
+                    activity.startActivity(connections.settingsIntent(spec));
+                } catch (android.content.ActivityNotFoundException e) {
+                    activity.startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:" + activity.getPackageName())));
+                }
+                notice(id.equals("storage") ? "Turn on \"Allow access to manage all files\" for Tune2AI Studio, then come back."
+                        : "Turn on notification access for Tune2AI Studio, then come back. If it is greyed out: App info → ⋮ → Allow restricted settings.");
+            }
+        });
+    }
+
+    /** Turns a connection off and deletes what it indexed. */
+    @JavascriptInterface
+    public void disconnect(String id) {
+        Connections.Spec spec = Connections.spec(id);
+        if (spec == null) return;
+        indexer.execute(() -> {
+            connections.disconnect(spec);
+            notice(spec.name + " disconnected. Its data was removed from the index.");
+            connectionsChanged();
+        });
+    }
+
+    @JavascriptInterface
+    public void syncConnection(String id) {
+        Connections.Spec spec = Connections.spec(id);
+        if (spec == null) return;
+        runIndexing("Syncing " + spec.name.toLowerCase(Locale.ROOT), p -> connections.sync(spec, p));
+    }
+
+    /** Opens this app's system settings, to grant or revoke a permission by hand. */
+    @JavascriptInterface
+    public void openAppSettings() {
+        activity.runOnUiThread(() -> activity.startActivity(new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + activity.getPackageName()))));
+    }
+
+    void onPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        if (requestCode != CONNECT_REQUEST || pendingConnect == null) return;
+        String id = pendingConnect;
+        pendingConnect = null;
+        Connections.Spec spec = Connections.spec(id);
+        if (spec != null && connections.granted(spec)) {
+            connections.setEnabled(id, true);
+            syncConnection(id);
+        } else if (spec != null) {
+            notice("Permission not granted, so " + spec.name.toLowerCase(Locale.ROOT) + " stays disconnected.");
+        }
+        connectionsChanged();
+    }
+
+    /** Back from system settings: finish a connection that was waiting for special access. */
+    void onResume() {
+        String id = pendingConnect;
+        Connections.Spec spec = id == null ? null : Connections.spec(id);
+        if (spec != null && connections.runtimePermissions(spec) == null) {
+            pendingConnect = null;
+            if (connections.granted(spec)) {
+                connections.setEnabled(id, true);
+                syncConnection(id);
+            }
+        }
+        connectionsChanged();
+    }
+
+    private void syncDueConnections() {
+        for (Connections.Spec spec : connections.dueForSync()) syncConnection(spec.id);
+    }
+
+    private void connectionsChanged() {
+        callJs("window.tune2ai && window.tune2ai.onConnectionsChanged && window.tune2ai.onConnectionsChanged()");
     }
 
     /** Opens the system folder picker; every readable file in the folder gets indexed. */
@@ -572,11 +705,18 @@ final class StudioBridge {
                         // values above are always valid
                     }
                     knowledgeChanged();
+                    connectionsChanged();
                 });
                 StringBuilder msg = new StringBuilder();
-                msg.append(s.added == 1 ? "Added 1 document" : "Added " + s.added + " documents");
-                if (s.skipped > 0) msg.append(", skipped ").append(s.skipped).append(" (unsupported type or too large)");
-                if (s.failed > 0) msg.append(", ").append(s.failed).append(" failed");
+                if (s.added == 0 && s.unchanged == 0 && s.skipped == 0 && s.failed == 0 && s.pdfSkipped == 0) {
+                    msg.append("No files found there");
+                } else {
+                    msg.append(s.added == 1 ? "Added 1 document" : "Added " + s.added + " documents");
+                }
+                if (s.unchanged > 0) msg.append(", ").append(s.unchanged).append(" unchanged");
+                if (s.skipped > 0) msg.append(", skipped ").append(s.skipped).append(" (not text, or larger than 4 MB)");
+                if (s.pdfSkipped > 0) msg.append(", skipped ").append(s.pdfSkipped).append(" PDFs (reading PDFs needs Android 15)");
+                if (s.failed > 0) msg.append(", ").append(s.failed).append(" could not be read");
                 notice(msg + ".");
                 if (s.lastError != null) notice(s.lastError);
             } catch (Exception e) {
@@ -585,6 +725,7 @@ final class StudioBridge {
                 indexing = null;
                 keepScreenOn(false);
                 knowledgeChanged();
+                connectionsChanged();
             }
         });
     }

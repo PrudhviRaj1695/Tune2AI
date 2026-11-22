@@ -274,6 +274,16 @@ h1, h2, h3, p { margin: 0; }
 .msg-foot { gap: 2px; margin-left: -6px; }
 .msg-foot .stats { margin-left: 6px; }
 
+/* Connections */
+.conn-status { font-weight: 600; }
+.conn-status.is-on { color: var(--live); }
+.conn-status.is-warn { color: var(--warn); }
+.conn-row.is-on .row-icon { background: var(--live-soft); color: var(--live); }
+.conn-note .row-icon { background: none; border: 1px dashed var(--line); }
+.privacy-card { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.privacy-card .row-icon { background: var(--live-soft); color: var(--live); }
+.view-tabs button { padding: 0 12px; }
+
 /* Sources tuning */
 .tuning { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 14px; }
 .strictness .range-label { margin-bottom: 8px; }
