@@ -59,6 +59,12 @@ class VectorIndex(private val storage: Storage) {
 
     suspend fun all(): List<IndexedChunk> = lock.withLock { loaded().values.flatten() }
 
+    /**
+     * Chunk lists per source. A source's list object is replaced (never mutated) when the source
+     * changes, so callers can cache work per list and detect changes by identity.
+     */
+    suspend fun bySource(): Map<String, List<IndexedChunk>> = lock.withLock { HashMap(loaded()) }
+
     suspend fun chunksOf(sourceId: String): List<IndexedChunk> = lock.withLock { loaded()[sourceId].orEmpty() }
 
     private suspend fun loaded(): MutableMap<String, List<IndexedChunk>> {

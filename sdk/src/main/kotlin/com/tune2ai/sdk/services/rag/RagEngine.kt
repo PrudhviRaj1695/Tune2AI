@@ -11,7 +11,6 @@ import com.tune2ai.sdk.services.embedding.EmbeddingService
 import com.tune2ai.sdk.services.embedding.cosine
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
-import kotlin.math.ln
 
 /**
  * Add, update, delete, and retrieve app knowledge (FR-SVC-5, T2AI-024.3).
@@ -57,7 +56,7 @@ class RagEngine(
         // The original text is kept so a different chunking strategy can re-split it later.
         storage.put(TEXTS, VectorIndex.keyOf(id), text.take(MAX_STORED_TEXT))
         val source = KnowledgeSource(id, name, metadata + (CHUNKING_KEY to strategy.id), pieces.size, text.length, clock(), modelId)
-        storage.put(SOURCES, VectorIndex.keyOf(id), json.encodeToString(KnowledgeSource.serializer(), source))
+        putSource(source)
         return source
     }
 
@@ -75,7 +74,7 @@ class RagEngine(
             if (text != null) {
                 val kept = add(source.id, source.name, text, source.metadata - CHUNKING_KEY)
                 // Keep the original "added" time so the Sources list order does not change.
-                storage.put(SOURCES, VectorIndex.keyOf(source.id), json.encodeToString(KnowledgeSource.serializer(), kept.copy(addedAtMillis = source.addedAtMillis)))
+                putSource(kept.copy(addedAtMillis = source.addedAtMillis))
             }
             onProgress(n + 1, stale.size)
         }
@@ -85,17 +84,29 @@ class RagEngine(
     suspend fun delete(id: String): Boolean {
         val removed = index.remove(id)
         storage.delete(TEXTS, VectorIndex.keyOf(id))
-        return storage.delete(SOURCES, VectorIndex.keyOf(id)) || removed
+        val deleted = storage.delete(SOURCES, VectorIndex.keyOf(id))
+        sourcesCache = null
+        return deleted || removed
     }
 
-    suspend fun sources(): List<KnowledgeSource> =
-        storage.list(SOURCES).values.mapNotNull { runCatching { json.decodeFromString(KnowledgeSource.serializer(), it) }.getOrNull() }
-            .sortedByDescending { it.addedAtMillis }
+    /** Cached after the first read; every write to [SOURCES] goes through this class and clears it. */
+    @Volatile private var sourcesCache: List<KnowledgeSource>? = null
+
+    suspend fun sources(): List<KnowledgeSource> = sourcesCache ?: storage.list(SOURCES).values
+        .mapNotNull { runCatching { json.decodeFromString(KnowledgeSource.serializer(), it) }.getOrNull() }
+        .sortedByDescending { it.addedAtMillis }
+        .also { sourcesCache = it }
+
+    private suspend fun putSource(source: KnowledgeSource) {
+        storage.put(SOURCES, VectorIndex.keyOf(source.id), json.encodeToString(KnowledgeSource.serializer(), source))
+        sourcesCache = null
+    }
 
     suspend fun clear() {
         index.clear()
         storage.clear(SOURCES)
         storage.clear(TEXTS)
+        sourcesCache = null
     }
 
     /**
@@ -109,7 +120,7 @@ class RagEngine(
             val chunks = index.chunksOf(source.id)
             val (vectors, modelId) = embed(source.name, chunks)
             index.replace(source.id, chunks.mapIndexed { i, c -> c.withVector(vectors?.get(i), modelId) })
-            storage.put(SOURCES, VectorIndex.keyOf(source.id), json.encodeToString(KnowledgeSource.serializer(), source.copy(embeddingModel = modelId)))
+            putSource(source.copy(embeddingModel = modelId))
             onProgress(n + 1, stale.size)
         }
         return stale.size
@@ -157,7 +168,8 @@ class RagEngine(
         val semantic = cosines.entries.filter { it.value >= minSimilarity }.sortedByDescending { it.value }.take(CANDIDATES).map { it.key }
 
         // 2. Keyword ranking. Keyword-only hits must cover enough of the question to count.
-        val keywordScores = keywordRank(query, chunks) { c -> listOfNotNull(sources[c.sourceId]?.name, c.section).joinToString(" ") }
+        val keywordScores = keywords.rank(query, index.bySource()) { c -> listOfNotNull(sources[c.sourceId]?.name, c.section).joinToString(" ") }
+        val keywordByChunk = keywordScores.associate { (c, s) -> c to s }
         val keyword = keywordScores.filter { (_, s) -> s.coverage >= (if (semanticRan) 0.5f else 0.34f) }
             .take(CANDIDATES).map { key(it.first) }
         val topBm25 = keywordScores.firstOrNull()?.second?.score ?: 1f
@@ -184,7 +196,7 @@ class RagEngine(
 
         // Merge neighbouring chunks of one document into a single passage, keeping rank order.
         val scoreOf = { c: IndexedChunk ->
-            cosines[key(c)]?.takeIf { key(c) in semantic } ?: (keywordScores.firstOrNull { it.first === c }?.second?.score?.div(topBm25) ?: 0f)
+            cosines[key(c)]?.takeIf { key(c) in semantic } ?: (keywordByChunk[c]?.score?.div(topBm25) ?: 0f)
         }
         val groups = mutableListOf<MutableList<IndexedChunk>>()
         for (c in picked) {
@@ -224,32 +236,7 @@ class RagEngine(
         }
     }
 
-    private class Bm25(val score: Float, val coverage: Float)
-
-    /**
-     * BM25 over chunk text plus [extra] (title and section, so a question naming a document finds
-     * it). Only chunks sharing at least one query term are returned, best first, with the share of
-     * distinct query terms they contain.
-     */
-    private fun keywordRank(query: String, chunks: List<IndexedChunk>, extra: (IndexedChunk) -> String): List<Pair<IndexedChunk, Bm25>> {
-        val terms = terms(query).distinct()
-        if (terms.isEmpty()) return emptyList()
-        val docs = chunks.map { it to terms(it.text + " " + extra(it)) }
-        val avgLength = docs.sumOf { it.second.size }.toDouble() / docs.size
-        val df = terms.associateWith { t -> docs.count { (_, words) -> t in words } }
-        return docs.mapNotNull { (chunk, words) ->
-            val counts = words.groupingBy { it }.eachCount()
-            var score = 0.0
-            var matched = 0
-            for (t in terms) {
-                val tf = counts[t] ?: continue
-                matched++
-                val idf = ln(1 + (docs.size - df.getValue(t) + 0.5) / (df.getValue(t) + 0.5))
-                score += idf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * words.size / avgLength))
-            }
-            if (matched > 0) chunk to Bm25(score.toFloat(), matched.toFloat() / terms.size) else null
-        }.sortedByDescending { it.second.score }
-    }
+    private val keywords = KeywordIndex()
 
     private fun IndexedChunk.withVector(vector: FloatArray?, modelId: String?) = IndexedChunk(sourceId, index, text, vector, modelId, section)
 
@@ -262,8 +249,6 @@ class RagEngine(
         private const val CANDIDATES = 20
         private const val RRF_K = 60f
         private const val MAX_PER_SOURCE = 2
-        private const val K1 = 1.2
-        private const val B = 0.75
         private val REF = Regex("^(.*)#(\\d+)(?:-(\\d+))?$")
 
         /**

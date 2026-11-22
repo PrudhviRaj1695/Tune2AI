@@ -46,6 +46,11 @@ abstract class BlockingContextSource : ContextSource {
  * conversation history → the user's message. Keeps the total within the model's context minus the
  * tokens reserved for output, dropping the oldest conversation turns first, and reports what was
  * included and what was left out.
+ *
+ * With [contextInLatestMessage], retrieved and app context go into the latest user message instead
+ * of the system prompt (system prompt → history → context + message). The start of the input then
+ * stays the same from turn to turn, so a backend with a prompt cache (llama.cpp) only processes the
+ * new message instead of the whole conversation, which is much faster on a phone.
  */
 class ContextManager(
     private val prompts: PromptManager,
@@ -53,6 +58,7 @@ class ContextManager(
     private val sources: List<ContextSource> = emptyList(),
     private val countTokens: (String) -> Int = ::estimateTokens,
     private val privacy: PrivacyApi? = null,
+    private val contextInLatestMessage: Boolean = false,
 ) : ContextAssembler {
 
     override suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions, remote: Boolean): AssembledContext {
@@ -69,6 +75,7 @@ class ContextManager(
         messages.filter { it.role == Role.SYSTEM }.forEach { systemParts += it.content }
 
         val question = messages.last().content
+        val contextParts = if (contextInLatestMessage) mutableListOf() else systemParts
         // Privacy guard: personal context never goes to a remote model unless the app allows it, and
         // sensitive values in it are hidden before any model sees them.
         val withhold = remote && privacy != null && !privacy.personalContextWithRemote
@@ -83,18 +90,22 @@ class ContextManager(
                     if (r.total == 0) item else item.copy(text = r.text)
                 }
                 if (items.isEmpty()) continue
-                systemParts += source.render(items)
+                contextParts += source.render(items)
                 items.forEach { included += "${source.name}:${it.ref}" }
             }
             if (privacy?.redactSensitive == true && included.any { !it.startsWith("prompt:") }) {
-                systemParts += GUARD_INSTRUCTIONS
+                contextParts += GUARD_INSTRUCTIONS
             }
             if (hidden > 0) included += "guard:$hidden sensitive values hidden"
         }
 
         val system = systemParts.takeIf { it.isNotEmpty() }?.let { ChatMessage.system(it.joinToString("\n\n")) }
         val turns = messages.filter { it.role != Role.SYSTEM }
-        val latest = turns.last()
+        val latest = if (contextInLatestMessage && contextParts.isNotEmpty()) {
+            ChatMessage.user(contextParts.joinToString("\n\n") + "\n\nQuestion: " + turns.last().content)
+        } else {
+            turns.last()
+        }
         var history = turns.dropLast(1)
 
         fun cost() = listOfNotNull(system).sumOf { tokens(it) } + history.sumOf { tokens(it) } + tokens(latest)

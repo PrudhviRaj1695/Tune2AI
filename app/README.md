@@ -87,6 +87,8 @@ Chats are saved after every reply in app-private storage (`files/chats/`, one JS
 - **How documents are split:** Smart (default, ~200-token paragraph/sentence chunks), Precise (~100 tokens, for exact facts), Broad (~380 tokens, for context-heavy answers), By section (one per heading or PDF page), Fixed size (word windows, for logs and CSV). New documents use the choice; **Apply** re-splits existing ones from their stored original text and re-embeds them.
 - **Include neighbouring passages:** adds the chunk before and after each match.
 
+**Speed with large sources (internal storage).** Keyword search uses an in-memory inverted index built once per document, so a question over thousands of files takes milliseconds rather than seconds. Retrieved passages and live phone data go into the latest message (`contextInLatestMessage`) and the system prompt carries only the date, so llama.cpp reuses its prompt cache and only processes the new message, not the whole conversation. Indexing runs at background priority and pauses between files while a reply is being written. If answers are still slow: fewer *Passages per answer*, *Include neighbouring passages* off, a smaller model (Qwen2.5 1.5B instead of Llama 3.2 3B), and a New chat for unrelated questions (shorter history). The Run trace shows where the time goes: a long *Context Manager* step is retrieval, a long first-token time is the model reading its input.
+
 Tips for the most accurate answers: install Search by meaning, use the Grounded prompt with Precise style, pick Precise chunking for fact-heavy documents (or By section for structured ones), and use Qwen2.5 1.5B or Llama 3.2 3B.
 
 ## Replies

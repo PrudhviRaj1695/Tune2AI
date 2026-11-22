@@ -63,6 +63,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 - [x] T2AI-022.2 `services/context/TokenCounter.kt`: chars/4 estimate with a `ponytail:` note (`estimateTokens` in `ContextManager.kt`); switch to the backend tokenizer if trimming misjudges.
 - [x] T2AI-022.3 `services/context/ContextManager.kt`: assemble, trim oldest conversation turns first, report `included`/`omitted` sources (sent as `Progress.sources`).
 - [x] T2AI-022.4 Tests: ordering, trimming at the limit, omitted-content report, empty sources.
+- [x] T2AI-022.6 `Builder.contextInLatestMessage`: retrieved and app context go into the latest user message (system prompt → history → context + message) so the input prefix is identical between turns and llama.cpp's prompt cache only processes the new message. Default off, so the order in the acceptance criteria above still holds unless an app opts in (`ContextPlacementTest`).
 - [x] T2AI-022.5 `Tune2AI.Builder.addContextSource` and `BlockingContextSource` (Java-friendly) for app-provided context, added for Studio's live phone data (latest SMS, calls, calendar, notifications); a failing source leaves the request without its items (`ContextSourceTest`).
 
 ### T2AI-023 — Provide embedding and reranking services
@@ -105,6 +106,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 - [x] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve. Without an embedding model, chunks are stored without vectors and retrieval uses BM25 keyword scoring; `reindex()` embeds them once a model is registered. Public surface: `Tune2AI.knowledge` (`KnowledgeApi`).
 - [x] T2AI-024.4 `RagContextSource` registered with the Context Manager; `knowledge.enabled` switches it per request.
 - [x] T2AI-024.5 Tests (`RagTest`): update replaces, delete removes (also after restart), top-k ordering, keyword fallback, reindex, disabled source, chat request includes retrieved chunks.
+- [x] T2AI-024.7 Retrieval speed on large indexes (internal storage): `KeywordIndex` tokenizes each source once and answers BM25 from postings; the source list is cached. 3,000 documents: ~500 ms → ~30 ms per question on a desktop JVM (`RagPerformanceTest`).
 - [x] T2AI-024.6 Retrieval tuning (added after first use): paragraph/sentence-aware chunks that keep their Markdown section; title and section embedded with each chunk; per-model query instructions (`QueryStyle`, e.g. bge); hybrid ranking (cosine + BM25 with a query-coverage rule) merged by reciprocal rank fusion; neighbouring chunks merged into one passage; at most two passages per document; numbered passages with citation guidance; `passagesPerAnswer` and `minSimilarity` on `KnowledgeApi`; `passage(ref)` to show a cited passage. Tests cover each.
 
 ### T2AI-025 — Implement the memory engine

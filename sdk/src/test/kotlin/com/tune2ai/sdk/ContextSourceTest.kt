@@ -83,3 +83,36 @@ class RuntimePromptTest {
             }
     }
 }
+
+/** Context in the latest message keeps the input prefix stable for llama.cpp's prompt cache. */
+class ContextPlacementTest {
+    private class Note : BlockingContextSource() {
+        override val name = "phone"
+        override fun fetchBlocking(query: String, model: ModelDescriptor) =
+            listOf(ContextItem("note", "Note about $query"))
+    }
+
+    @Test
+    fun theStartOfTheInputStaysTheSameAcrossTurns() = runBlocking {
+        val modelFile = File.createTempFile("tiny", ".fake").apply { deleteOnExit() }
+        val backend = FakeBackend()
+        Tune2AI.Builder.forTests(FakePlatform()).addBackend(backend)
+            .addPromptTemplate(PromptTemplate("assistant", 1, "Be concise."))
+            .defaultPromptTemplate("assistant")
+            .addContextSource(Note())
+            .contextInLatestMessage(true)
+            .build().use { ai ->
+                ai.models.register(fakeModel(path = modelFile.path))
+                val session = ai.chat.session("s")
+                session.send("first question").toList()
+                val first = backend.lastRequest!!.messages
+                session.send("second question").toList()
+                val second = backend.lastRequest!!.messages
+                assertTrue(first.first().content == "Be concise.")
+                assertTrue("system prompt unchanged", first.first() == second.first())
+                assertTrue(second.last().content.startsWith("Relevant information:"))
+                assertTrue(second.last().content.endsWith("Question: second question"))
+                assertTrue("history keeps the plain question", second[1].content == "first question")
+            }
+    }
+}

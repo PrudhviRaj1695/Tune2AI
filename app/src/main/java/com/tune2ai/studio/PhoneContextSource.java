@@ -62,7 +62,8 @@ final class PhoneContextSource extends BlockingContextSource {
 
     @Override
     public String render(List<ContextItem> items) {
-        StringBuilder sb = new StringBuilder("Live data read from the user's phone just now. Use it to answer questions about "
+        String now = new java.text.SimpleDateFormat("EEEE d MMMM yyyy, HH:mm", Locale.getDefault()).format(new java.util.Date());
+        StringBuilder sb = new StringBuilder("Live data read from the user's phone just now (" + now + "). Use it to answer questions about "
                 + "their messages, calls, calendar, or notifications; if what they ask about is not in it, say so.\n\n");
         for (ContextItem item : items) sb.append(item.getText()).append("\n\n");
         return sb.toString().trim();

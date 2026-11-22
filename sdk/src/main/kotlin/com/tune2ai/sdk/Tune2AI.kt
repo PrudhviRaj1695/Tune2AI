@@ -52,6 +52,7 @@ class Tune2AI private constructor(
     defaultTemplate: String?,
     tools: List<Tool>,
     contextSources: List<ContextSource>,
+    contextInLatestMessage: Boolean,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
@@ -73,6 +74,7 @@ class Tune2AI private constructor(
             defaultTemplate,
             sources = contextSources + RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.includeNeighbors }, { knowledge.enabled }),
             privacy = privacy,
+            contextInLatestMessage = contextInLatestMessage,
         ),
     )
 
@@ -110,6 +112,7 @@ class Tune2AI private constructor(
         private var defaultTemplate: String? = null
         private val tools = mutableListOf<Tool>()
         private val contextSources = mutableListOf<ContextSource>()
+        private var contextInLatestMessage = false
 
         /** Registers a backend; fails fast on a duplicate id or missing capabilities. */
         fun addBackend(backend: InferenceBackend) = apply { backends.register(backend) }
@@ -118,6 +121,13 @@ class Tune2AI private constructor(
 
         /** Offers a host-provided tool to agents (decision D6). Validated when [build] runs. */
         fun addTool(tool: Tool) = apply { tools += tool }
+
+        /**
+         * Puts retrieved and app context in the latest user message instead of the system prompt, so
+         * the start of the input is identical between turns and llama.cpp reuses its prompt cache:
+         * only the new message is processed. Recommended for on-device chat with long conversations.
+         */
+        fun contextInLatestMessage(enabled: Boolean) = apply { contextInLatestMessage = enabled }
 
         /**
          * Adds app-provided context (for example live data the app reads at request time). Its items
@@ -139,7 +149,7 @@ class Tune2AI private constructor(
             if (backends.all.isEmpty()) throw Tune2AIException.InvalidRequest("Add at least one inference backend with addBackend(...)")
             defaultTemplate?.let { prompts.get(it) } // fails now if the default template was never registered
             ToolCallingEngine(tools) // fails now on invalid names or schemas
-            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList(), contextSources.toList())
+            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList(), contextSources.toList(), contextInLatestMessage)
         }
 
         internal companion object {

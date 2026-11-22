@@ -906,9 +906,13 @@ final class StudioBridge {
     /** Runs one indexing job at a time, reporting progress to the Sources tab. */
     private void runIndexing(String label, IndexJob job) {
         indexer.execute(() -> {
+            // Indexing (and embedding) must not slow down chat: low priority, and it pauses between
+            // files while a reply is being generated.
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
             keepScreenOn(true);
             try {
                 KnowledgeConnector.Summary s = job.run((done, total, current) -> {
+                    waitWhileChatting();
                     try {
                         indexing = new JSONObject().put("label", label).put("done", done).put("total", total).put("current", current);
                     } catch (JSONException ignored) {
@@ -938,6 +942,14 @@ final class StudioBridge {
                 connectionsChanged();
             }
         });
+    }
+
+    private void waitWhileChatting() {
+        try {
+            while (!running.isEmpty()) Thread.sleep(250);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static java.util.List<Uri> urisOf(Intent data) {

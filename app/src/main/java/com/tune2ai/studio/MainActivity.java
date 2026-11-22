@@ -57,6 +57,8 @@ public final class MainActivity extends Activity {
                 .defaultPromptTemplate("helpful-assistant")
                 // Live messages, calls, calendar, and notifications for questions about them.
                 .addContextSource(phone)
+                // Context in the latest message: the conversation prefix stays cached between turns.
+                .contextInLatestMessage(true)
                 // Demo tools for Agent mode. Handlers run on a background thread.
                 .addTool(new Tool("device_status",
                         "Reports this device's free memory, battery level, and thermal state.",
@@ -112,9 +114,13 @@ public final class MainActivity extends Activity {
         if (savedInstanceState == null) bridge.onShare(getIntent()); // launched from another app's Share sheet
     }
 
-    /** The {{today}} prompt variable, e.g. "Sunday 22 November 2026, 14:05". */
+    /**
+     * The {{today}} prompt variable, e.g. "Sunday 22 November 2026". Date only: the system prompt then
+     * stays identical all day, so llama.cpp can reuse its prompt cache between messages. The time of
+     * day reaches the model in the live phone-data block, which sits in the latest message.
+     */
     static String today() {
-        return new java.text.SimpleDateFormat("EEEE d MMMM yyyy, HH:mm", java.util.Locale.getDefault()).format(new Date());
+        return new java.text.SimpleDateFormat("EEEE d MMMM yyyy", java.util.Locale.getDefault()).format(new Date());
     }
 
     @Override
