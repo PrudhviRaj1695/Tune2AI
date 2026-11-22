@@ -296,6 +296,13 @@ function loadConnections() {
 }
 
 function connectionRow(c) {
+  if (c.available === false) {
+    return `
+    <div class="list-row conn-row is-unavailable">
+      <span class="row-icon">${svgIcon(c.icon)}</span>
+      <span class="model-text"><strong>${escapeHtml(c.name)}</strong><small>Only in the full build (install with adb). Play Protect blocks this permission in apps installed from a browser or file manager.</small></span>
+    </div>`;
+  }
   const on = c.enabled && c.granted;
   const status = on
     ? `<span class="conn-status is-on">Connected</span> · ${c.items} ${c.id === "storage" ? "files" : "items"}${c.lastSync ? ` · synced ${ago(c.lastSync)}` : ""}`
@@ -342,7 +349,7 @@ function renderConnections() {
   $("#connections-groups").innerHTML = CONNECTION_GROUPS.map((g) => `
     <h3 class="label">${g.title}</h3>
     <div class="card list">${connections.connections.filter((c) => c.group === g.id).map(connectionRow).join("")}${extra[g.id] || ""}</div>`).join("");
-  const n = connections.connections.filter((c) => c.enabled && c.granted).length;
+  const n = connections.connections.filter((c) => c.available !== false && c.enabled && c.granted).length;
   const count = $("#connections-count");
   count.hidden = !n;
   count.textContent = n;

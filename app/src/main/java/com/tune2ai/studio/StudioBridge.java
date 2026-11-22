@@ -459,6 +459,7 @@ final class StudioBridge {
                 list.put(new JSONObject()
                         .put("id", spec.id).put("name", spec.name).put("description", spec.description)
                         .put("icon", spec.icon).put("group", spec.group)
+                        .put("available", connections.available(spec))
                         .put("granted", connections.granted(spec))
                         .put("enabled", connections.enabled(spec.id))
                         .put("settings", connections.runtimePermissions(spec) == null)
@@ -479,6 +480,10 @@ final class StudioBridge {
     public void connect(String id) {
         Connections.Spec spec = Connections.spec(id);
         if (spec == null) return;
+        if (!connections.available(spec)) {
+            notice(spec.name + " is only in the full build of Studio (install it with adb). Play Protect blocks it in sideloaded apps.");
+            return;
+        }
         if (connections.granted(spec)) {
             connections.setEnabled(id, true);
             syncConnection(id);

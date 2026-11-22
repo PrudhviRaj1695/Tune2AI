@@ -279,6 +279,7 @@ h1, h2, h3, p { margin: 0; }
 .conn-status.is-on { color: var(--live); }
 .conn-status.is-warn { color: var(--warn); }
 .conn-row.is-on .row-icon { background: var(--live-soft); color: var(--live); }
+.conn-row.is-unavailable { opacity: .55; }
 .conn-note .row-icon { background: none; border: 1px dashed var(--line); }
 .privacy-card { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
 .privacy-card .row-icon { background: var(--live-soft); color: var(--live); }

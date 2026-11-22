@@ -109,6 +109,31 @@ final class Connections {
 
     // ---------- Access ----------
 
+    /**
+     * Whether this build can offer [spec] at all. The "standard" flavor leaves out SMS, call history,
+     * and the notification listener, because Play Protect blocks sideloaded apps that request them.
+     */
+    boolean available(Spec spec) {
+        PackageManager pm = context.getPackageManager();
+        if (spec.id.equals("notifications")) {
+            try {
+                pm.getServiceInfo(new ComponentName(context, StudioNotificationListener.class), 0);
+                return true;
+            } catch (PackageManager.NameNotFoundException e) {
+                return false;
+            }
+        }
+        if (spec.permissions.length == 0) return true;
+        try {
+            String[] declared = pm.getPackageInfo(context.getPackageName(), PackageManager.GET_PERMISSIONS).requestedPermissions;
+            java.util.List<String> list = declared == null ? Collections.emptyList() : java.util.Arrays.asList(declared);
+            for (String p : spec.permissions) if (!list.contains(p)) return false;
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+    }
+
     boolean granted(Spec spec) {
         switch (spec.id) {
             case "storage":
@@ -166,7 +191,7 @@ final class Connections {
         List<Spec> due = new ArrayList<>();
         long now = System.currentTimeMillis();
         for (Spec s : ALL) {
-            if (enabled(s.id) && granted(s) && now - lastSync(s.id) > AUTO_SYNC_AFTER) due.add(s);
+            if (available(s) && enabled(s.id) && granted(s) && now - lastSync(s.id) > AUTO_SYNC_AFTER) due.add(s);
         }
         return due;
     }

@@ -19,10 +19,18 @@ jobs:
       - name: Reply renderer tests
         run: node app/src/test/js/markdown.test.js
       - name: Build and test
-        run: ./gradlew :sdk:assembleRelease :sdk:testDebugUnitTest :sdk-remote:testDebugUnitTest :sdk-llama:assembleRelease :app:testDebugUnitTest :app:assembleDebug
-      - name: Upload Studio APK
+        run: ./gradlew :sdk:assembleRelease :sdk:testDebugUnitTest :sdk-remote:testDebugUnitTest :sdk-llama:assembleRelease :app:testStandardDebugUnitTest :app:assembleDebug
+      # standard: installs from a browser or file manager (no SMS, call log, or notification access).
+      - name: Upload Studio APK (standard)
         uses: actions/upload-artifact@v4
         with:
-          name: tune2ai-studio-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          name: tune2ai-studio-standard-debug-apk
+          path: app/build/outputs/apk/standard/debug/*.apk
+          if-no-files-found: error
+      # full: adds SMS, call history, and app notifications; Play Protect blocks it unless installed with adb.
+      - name: Upload Studio APK (full, install with adb)
+        uses: actions/upload-artifact@v4
+        with:
+          name: tune2ai-studio-full-debug-apk
+          path: app/build/outputs/apk/full/debug/*.apk
           if-no-files-found: error

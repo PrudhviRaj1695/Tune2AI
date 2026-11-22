@@ -13,6 +13,20 @@ android {
         versionCode 1
         versionName '1.0.0'
     }
+
+    // Play Protect blocks sideloaded apps that request SMS or notification access (fraud protection,
+    // e.g. in India). "standard" leaves those out so it installs from a browser or file manager;
+    // "full" adds SMS, call history, and app notifications for installs through adb.
+    flavorDimensions = ['access']
+    productFlavors {
+        standard {
+            dimension 'access'
+        }
+        full {
+            dimension 'access'
+            versionNameSuffix '-full'
+        }
+    }
 }
 
 dependencies {

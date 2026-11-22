@@ -54,6 +54,13 @@ Google Drive is reachable through Sources → Files or Folder (choose Drive in t
 
 The system prompt (v5) includes today's date and time, so "what's on Friday?" or "what did Mom text yesterday?" resolve against the indexed dates.
 
+**Two builds.** Play Protect blocks apps installed outside the Play Store (from a browser or file manager) when they request SMS or notification access ("App blocked to protect your device"), so Studio has two flavors:
+
+- **standard** (`app-standard-debug.apk`): installs normally. Messages, Call history, and App notifications show as "only in the full build".
+- **full** (`app-full-debug.apk`): all connections. Install it from a computer with `adb install -r app-full-debug.apk`; Play Protect does not block adb installs.
+
+Both use the same application id, so they replace each other and keep your models and sources. `./gradlew :app:assembleDebug` builds both; unit tests run with `:app:testStandardDebugUnitTest`.
+
 Notes: on Android 13+, a sideloaded app may need **App info → ⋮ → Allow restricted settings** before notification access can be turned on. SMS and call-log permissions are restricted on Google Play; they are fine for this debug build but need a policy declaration (or removal) before a Play release.
 
 Why a folder may fail to add: Android's folder picker does not allow the storage root, **Download**, or Android/ ("Can't use this folder"). Pick a subfolder, or use Connections → Internal storage. While a large folder is listed, the progress card shows "Scanning… N files found"; the final message says how many files were added, unchanged, skipped (not text or over 4 MB), or PDFs skipped (before Android 15).
