@@ -30,6 +30,7 @@ import com.tune2ai.sdk.services.prompt.PromptTemplate;
 
 public final class MainActivity extends Activity {
     private static final String PAGE_ROOT = "file:///android_asset/www/";
+    static final String SYSTEM_PROMPT = "You are a helpful assistant running privately on the user's phone. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, **bold** for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.";
 
     private WebView webView;
     private Tune2AI ai;
@@ -43,8 +44,8 @@ public final class MainActivity extends Activity {
         ai = new Tune2AI.Builder(this)
                 .addBackend(new LlamaBackend())
                 .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
-                .addPromptTemplate(new PromptTemplate("helpful-assistant", 3,
-                        "Be concise, accurate, and use supplied context when relevant."))
+                // v4: asks for Markdown structure, which Studio renders (lists, tables, code).
+                .addPromptTemplate(new PromptTemplate("helpful-assistant", 4, SYSTEM_PROMPT))
                 .defaultPromptTemplate("helpful-assistant")
                 // Demo tools for Agent mode. Handlers run on a background thread.
                 .addTool(new Tool("device_status",

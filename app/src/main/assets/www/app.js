@@ -31,10 +31,10 @@ const MODES = {
     title: "Ask anything.",
     copy: "Private by design. Every request runs through the same path your app will use.",
     placeholder: "Message Tune2AI…",
-    suggestions: ["How does on-device inference protect user data?", "Draft a release note for our chat feature", "Compare 3B and 8B models on a mid-range phone"],
+    suggestions: ["How does on-device inference protect user data?", "When does my Lisbon flight leave?", "Compare 3B and 8B models on a mid-range phone"],
     reply: (c) => c.remote
-      ? `This request went to the Remote API backend over HTTPS and streamed back as SSE events. Routing, context assembly, and the event stream are identical to an on-device run, so switching back is one setting.\n\nUse remote for large models or long contexts; keep on-device as the default for privacy and offline use.`
-      : `Prompts and outputs never leave this phone: ${c.backend} runs ${c.model} locally, so there is no server to log data and replies keep working offline.\n\nThe trade-off is device headroom. The Model Manager checks free memory before loading, and the Device Resource Monitor can unload idle models under pressure so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
+      ? `This request went to the **Remote API** backend over HTTPS and streamed back as SSE events.\n\n- Routing, context assembly, and events are **identical** to an on-device run\n- Switching back is one setting\n\nUse remote for large models or long contexts; keep on-device as the default for privacy and offline use.`
+      : `**Prompts and outputs never leave this phone.** ${c.backend} runs ${c.model} locally, so:\n\n- There is **no server** that could log your data\n- Replies keep working **offline**\n- Nothing is shared with a third party\n\n### The trade-off\n\n| | On-device | Remote |\n|---|---|---|\n| Privacy | Stays on the phone | Sent over HTTPS |\n| Works offline | Yes | No |\n| Model size | Up to ~3B | Any |\n\nThe Model Manager checks free memory before loading and unloads idle models under pressure, so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
   },
   Agent: {
     title: "Give an agent a task.",
@@ -269,6 +269,8 @@ $$(".view-tabs [role=tab]").forEach((tab) => tab.addEventListener("click", () =>
    In a browser preview there is no bridge; a sample index stands in. */
 const PREVIEW_KNOWLEDGE = {
   enabled: true,
+  passagesPerAnswer: 3,
+  minSimilarity: 0.55,
   embeddingModel: null,
   embedder: { id: "bge-small-en-v1.5-q8_0", name: "BGE small (search)", sizeBytes: 36806944, installed: false, downloading: false },
   indexing: null,
@@ -300,6 +302,13 @@ function renderKnowledge() {
   const k = knowledge;
   const chunks = k.sources.reduce((n, src) => n + src.chunks, 0);
   $("#sources-switch").checked = k.enabled;
+  $("#tuning").hidden = !k.enabled;
+  $("#passages").value = k.passagesPerAnswer ?? 3;
+  $("#passages").dispatchEvent(new Event("input"));
+  const floor = k.minSimilarity ?? 0.55;
+  const strict = STRICTNESS.reduce((best, v) => (Math.abs(v - floor) < Math.abs(best - floor) ? v : best));
+  $$('input[name="strictness"]').forEach((r) => { r.checked = Number(r.value) === strict; });
+  $("#strictness-hint").textContent = STRICTNESS_HINT[strict];
   $("#sources-summary").textContent = k.sources.length
     ? `${k.sources.length} document${k.sources.length === 1 ? "" : "s"} · ${chunks} passages · ${k.embeddingModel ? "search by meaning" : "keyword search"}`
     : "Connect a folder, files, or a note below.";
@@ -402,6 +411,22 @@ $("#note-form").addEventListener("submit", (event) => {
   $("#note-form").hidden = true;
 });
 
+const STRICTNESS = [0.45, 0.55, 0.65];
+const STRICTNESS_HINT = {
+  0.45: "Loose also uses loosely related passages. Use it when answers miss things you know are there.",
+  0.55: "Balanced suits most documents.",
+  0.65: "Strict only uses close matches. Use it when answers pull in unrelated passages.",
+};
+function saveTuning() {
+  knowledge.passagesPerAnswer = Number($("#passages").value);
+  knowledge.minSimilarity = Number($('input[name="strictness"]:checked').value);
+  bridge?.setKnowledgeTuning(knowledge.passagesPerAnswer, knowledge.minSimilarity);
+  $("#strictness-hint").textContent = STRICTNESS_HINT[knowledge.minSimilarity];
+}
+bindRange($("#passages"), $("#passages-value"), (n) => String(n));
+$("#passages").addEventListener("change", saveTuning);
+$$('input[name="strictness"]').forEach((r) => r.addEventListener("change", saveTuning));
+
 $("#sources-switch").addEventListener("change", (event) => {
   knowledge.enabled = event.target.checked;
   bridge?.setKnowledgeEnabled(event.target.checked);
@@ -417,7 +442,7 @@ $("#search-form").addEventListener("submit", (event) => {
     : knowledge.sources.length ? [{ source: knowledge.sources[0].name, index: 1, text: "Sample passage: in the app this shows the exact text the model would receive.", score: 0.71, smart: !!knowledge.embeddingModel }] : [];
   $("#search-results").innerHTML = hits.length ? hits.map((h) => `
     <div class="hit">
-      <div class="hit-head"><strong>${escapeHtml(h.source)}</strong><span>passage ${h.index} · ${h.smart ? `${Math.round(h.score * 100)}% match` : "keyword match"}</span></div>
+      <div class="hit-head"><strong>${escapeHtml([h.source, h.section].filter(Boolean).join(" › "))}</strong><span>passage ${h.ref ? refPassage(h.ref) : h.index} · ${h.smart ? `${Math.round(h.score * 100)}% match` : "keyword match"}</span></div>
       <p>${escapeHtml(h.text.length > 360 ? `${h.text.slice(0, 360)}…` : h.text)}</p>
     </div>`).join("") : `<p class="empty-row">No passage matches. The model would answer without your sources.</p>`;
 });
@@ -447,7 +472,7 @@ function loadLiveModels() {
 
 function contextItems() {
   return [
-    { label: "Prompt v3", detail: "Helpful assistant v3" },
+    { label: "Prompt v4", detail: "Helpful assistant v4" },
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
     knowledge?.enabled && knowledge.sources.length && { label: "Sources", detail: `Your sources · best ${knowledge.embeddingModel ? "matches" : "keyword matches"}, up to 3` },
@@ -478,7 +503,7 @@ function describeSource(source) {
   const [kind, value = ""] = source.replace(/^omitted /, "").split(/:(.*)/s);
   if (omitted) return `Trimmed · ${value}`;
   if (kind === "prompt") return `Prompt ${value.replace("@", " v")}`;
-  if (kind === "rag") return `Source · ${value.replace(/#(\d+)$/, ", passage $1")}`;
+  if (kind === "rag") return `Source · ${value.replace(/#([\d-]+)$/, ", passage $1")}`;
   return `${kind[0].toUpperCase()}${kind.slice(1)} · ${value}`;
 }
 
@@ -613,12 +638,13 @@ function setMetrics(first = "—", tps = "—", tokens = "—", total = "—") {
    ponytail: simulated replies with the SDK's event shapes (step, first-token, delta, completed).
    T2AI-050 replaces simulate() with the native bridge; everything below it stays. */
 function simulate(request, emit) {
+  const contextSources = request.sources || null;
   const timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   const stepMs = [2, 4, 3, 7];
   let t = 0;
   for (let i = 0; i < 5; i++) {
-    at(t, () => emit({ type: "step", index: i, ms: stepMs[i - 1] }));
+    at(t, () => emit({ type: "step", index: i, ms: stepMs[i - 1], sources: i === 3 ? contextSources : undefined }));
     t += 180;
   }
   const firstToken = (request.remote ? 900 : 560) + Math.floor(Math.random() * 280);
@@ -722,20 +748,95 @@ function addAssistantMessage(simulated) {
       <span class="dot" aria-hidden="true"></span><strong></strong><span>${state.execution === "remote" ? "Remote" : "On-device"}</span>${simulated && live ? '<span class="chip">Simulated</span>' : ""}
     </div>
     <div class="tools"></div>
-    <div class="answer is-streaming"><p></p></div>
+    <div class="answer is-streaming"><span class="thinking">Thinking</span></div>
+    <div class="answer-sources" hidden></div>
+    <div class="passage" hidden></div>
     <div class="msg-foot"></div>`;
   $(".msg-head strong", msg).textContent = model.short;
   els.conversation.append(msg);
   return msg;
 }
 
-/* Appends streamed text, starting a new paragraph at each blank line. */
-function appendText(answer, text) {
-  text.split(/\n{2,}/).forEach((part, i) => {
-    if (i > 0) answer.append(document.createElement("p"));
-    answer.lastElementChild.append(part);
+/* Replies are Markdown: re-rendered as text streams in, at most once per frame. Citations like
+   [1] become buttons that open the passage the model was given. */
+function renderAnswer(msg) {
+  const refs = msg._refs || [];
+  $(".answer", msg).innerHTML = Markdown.render(msg._raw, {
+    cite: (n) => (refs[n - 1] ? `<button class="cite" type="button" data-cite="${n}" aria-label="Source ${n}">${n}</button>` : null),
   });
 }
+
+function scheduleRender(msg) {
+  if (msg._pending) return;
+  msg._pending = true;
+  requestAnimationFrame(() => {
+    msg._pending = false;
+    stickToBottom(() => renderAnswer(msg));
+  });
+}
+
+const refName = (ref) => ref.replace(/#[\d-]+$/, "");
+const refPassage = (ref) => ref.match(/#([\d-]+)$/)?.[1] || "";
+
+function renderSourceChips(msg) {
+  const refs = msg._refs || [];
+  const box = $(".answer-sources", msg);
+  box.hidden = !refs.length;
+  box.innerHTML = refs.length ? `<span class="answer-sources-label">Sources</span>` + refs.map((ref, i) => `
+    <button class="source-chip" type="button" data-cite="${i + 1}"><b>${i + 1}</b><span>${escapeHtml(refName(ref))}</span></button>`).join("") : "";
+}
+
+/* Opens (or closes) the passage behind citation n under the reply. */
+function togglePassage(msg, n) {
+  const ref = (msg._refs || [])[n - 1];
+  const panel = $(".passage", msg);
+  if (!ref) return;
+  if (!panel.hidden && panel.dataset.n === String(n)) {
+    panel.hidden = true;
+    $$("[data-cite]", msg).forEach((b) => b.classList.remove("is-open"));
+    return;
+  }
+  const p = live ? JSON.parse(bridge.knowledgePassage(ref) || "null")
+    : { source: refName(ref), section: "Flights", text: "We fly out on Friday at 07:40 from Terminal 2 (TAP TP1351). Check-in closes 45 minutes before departure. Hotel check-in is after 15:00." };
+  panel.dataset.n = String(n);
+  panel.hidden = false;
+  panel.innerHTML = p ? `
+    <div class="passage-head"><b>${n}</b><strong>${escapeHtml(p.source)}</strong><span>${escapeHtml([p.section, `passage ${refPassage(ref)}`].filter(Boolean).join(" · "))}</span></div>
+    <p>${escapeHtml(p.text.length > 700 ? `${p.text.slice(0, 700)}…` : p.text)}</p>`
+    : `<p class="passage-missing">This passage is no longer in your sources.</p>`;
+  $$("[data-cite]", msg).forEach((b) => b.classList.toggle("is-open", b.dataset.cite === String(n)));
+}
+
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    area.style.cssText = "position:fixed;opacity:0";
+    document.body.append(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const cite = event.target.closest("[data-cite]");
+  if (cite) togglePassage(cite.closest(".msg"), Number(cite.dataset.cite));
+  const code = event.target.closest("[data-copy-code]");
+  if (code) {
+    copyText($("pre", code.closest(".md-code")).textContent);
+    code.textContent = "Copied";
+    setTimeout(() => { code.textContent = "Copy"; }, 1500);
+  }
+  const copy = event.target.closest("[data-copy-reply]");
+  if (copy) {
+    copyText(Markdown.toPlainText(copy.closest(".msg")._raw));
+    toast("Copied.");
+  }
+  const retry = event.target.closest("[data-retry]");
+  if (retry && !state.run) run(retry.closest(".msg")._prompt);
+});
 
 /* Tool activity in an agent reply: one expandable card per call, with arguments and result. */
 const prettyJson = (json) => {
@@ -775,7 +876,9 @@ function run(text) {
   const remote = state.execution === "remote";
   const requestId = `req_${crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, "0")}`;
   let firstMs = null;
-  let usedSources = [];
+  msg._raw = "";
+  msg._refs = [];
+  msg._prompt = text;
 
   $("#request-id").textContent = requestId;
   renderTimeline(steps, 0);
@@ -793,7 +896,7 @@ function run(text) {
       if (event.index > 0) $(".step-time", items[event.index - 1]).textContent = `${event.ms} ms`;
       if (event.detail) $(".step-text small", items[event.index]).textContent = event.detail;
       if (event.sources?.length) {
-        usedSources = [...new Set(event.sources.filter((src) => src.startsWith("rag:")).map((src) => src.slice(4).replace(/#\d+$/, "")))];
+        msg._refs = event.sources.filter((src) => src.startsWith("rag:")).map((src) => src.slice(4));
         state.sources = event.sources;
         $("#included-list").innerHTML = event.sources.map((s) => `<li>${svgIcon("i-check")}${describeSource(s)}</li>`).join("");
       }
@@ -805,7 +908,8 @@ function run(text) {
     } else if (event.type === "tool-result") {
       finishToolCard(msg, event);
     } else if (event.type === "delta") {
-      appendText(answer, event.text);
+      msg._raw += event.text;
+      scheduleRender(msg);
     } else if (event.type === "completed") {
       if (event.firstMs != null) firstMs = event.firstMs;
       finish("ok", event);
@@ -823,15 +927,20 @@ function run(text) {
       $(".step-time", items[4]).textContent = `${stats.totalMs} ms`;
       setStatus("ok", "Completed");
       setMetrics(`${((firstMs ?? 0) / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
-      foot.innerHTML = `<button class="stats" type="button" data-open="trace" aria-label="Open run trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s</button>`;
-      if (usedSources.length) foot.insertAdjacentHTML("beforeend", `<span class="used-sources">${svgIcon("i-file")}From ${usedSources.map(escapeHtml).join(", ")}</span>`);
+      renderAnswer(msg);
+      renderSourceChips(msg);
+      foot.innerHTML = `
+        <button class="foot-action" type="button" data-copy-reply aria-label="Copy reply">${svgIcon("i-copy")}</button>
+        <button class="foot-action" type="button" data-retry aria-label="Ask again">${svgIcon("i-refresh")}</button>
+        <button class="stats" type="button" data-open="trace" aria-label="Open run trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s</button>`;
     } else {
       items.forEach((li) => { if (li.dataset.state === "active") li.dataset.state = "cancelled"; });
       const failed = result === "failed";
       setStatus(failed ? "failed" : "cancelled", failed ? "Failed" : "Cancelled");
       if (firstMs === null) setMetrics();
       else { $("#m-tps").textContent = "—"; $("#m-tokens").textContent = "—"; $("#m-total").textContent = "—"; }
-      if (!answer.textContent.trim()) answer.remove();
+      if (msg._raw.trim()) renderAnswer(msg);
+      else answer.remove();
       if (failed) {
         const error = document.createElement("p");
         error.className = "error-text";
@@ -850,8 +959,12 @@ function run(text) {
     if (live) loadLiveModels(); // load state changed
   }
 
+  // Preview: a question about the sample trip shows a cited answer from the sample sources.
+  const previewCited = !live && knowledge?.enabled && /lisbon|flight|trip/i.test(text) && knowledge.sources.some((src) => src.name === "Lisbon trip.md");
   const stop = simulated
-    ? simulate({ text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps || 40 }, onEvent)
+    ? simulate(previewCited
+      ? { text: "Your flight leaves **Friday at 07:40** from **Terminal 2** [1].\n\n- Check-in closes **45 minutes** before departure [1]\n- Hotel check-in is after **15:00** [1]\n\nWant a reminder the evening before?", sources: ["prompt:helpful-assistant@4", "rag:Lisbon trip.md#2-3"], remote, tps: model.tps || 40 }
+      : { text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps || 40 }, onEvent)
     : liveSource(text, onEvent);
   state.run = { cancel: () => { stop(); finish("cancelled"); } };
 }

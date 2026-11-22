@@ -79,7 +79,10 @@ final class StudioBridge {
         this.remote = remote;
         this.modelsDir = new File(activity.getFilesDir(), "models");
         this.connector = new KnowledgeConnector(activity, ai.getKnowledge());
-        ai.getKnowledge().setEnabled(activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE).getBoolean("enabled", true));
+        android.content.SharedPreferences prefs = activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE);
+        ai.getKnowledge().setEnabled(prefs.getBoolean("enabled", true));
+        ai.getKnowledge().setPassagesPerAnswer(prefs.getInt("passages", 3));
+        ai.getKnowledge().setMinSimilarity(prefs.getFloat("minSimilarity", ai.getKnowledge().getMinSimilarity()));
         io.execute(this::registerModelsInStorage);
     }
 
@@ -352,6 +355,8 @@ final class StudioBridge {
         JSONObject o = new JSONObject();
         try {
             o.put("enabled", ai.getKnowledge().getEnabled());
+            o.put("passagesPerAnswer", ai.getKnowledge().getPassagesPerAnswer());
+            o.put("minSimilarity", ai.getKnowledge().getMinSimilarity());
             String model = ai.getKnowledge().embeddingModel();
             o.put("embeddingModel", model == null ? JSONObject.NULL : model);
             JSONObject embedder = new JSONObject();
@@ -396,6 +401,34 @@ final class StudioBridge {
     public void setKnowledgeEnabled(boolean enabled) {
         ai.getKnowledge().setEnabled(enabled);
         activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply();
+    }
+
+    /**
+     * Retrieval tuning from the Sources tab: how many passages a request includes, and the
+     * similarity floor for meaning-based matches. Kept across restarts.
+     */
+    @JavascriptInterface
+    public void setKnowledgeTuning(int passages, double minSimilarity) {
+        ai.getKnowledge().setPassagesPerAnswer(passages);
+        ai.getKnowledge().setMinSimilarity((float) minSimilarity);
+        activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE).edit()
+                .putInt("passages", ai.getKnowledge().getPassagesPerAnswer())
+                .putFloat("minSimilarity", ai.getKnowledge().getMinSimilarity())
+                .apply();
+    }
+
+    /** The passage behind a citation, e.g. "Lisbon trip.md#2-3", as {source, section, text}; "null" if gone. */
+    @JavascriptInterface
+    public String knowledgePassage(String ref) {
+        com.tune2ai.sdk.api.RetrievedChunk c = ai.getKnowledge().passageBlocking(ref);
+        if (c == null) return "null";
+        try {
+            return new JSONObject().put("source", c.getSourceName())
+                    .put("section", c.getSection() == null ? "" : c.getSection())
+                    .put("text", c.getText()).toString();
+        } catch (JSONException e) {
+            return "null";
+        }
     }
 
     /** Opens the system folder picker; every readable file in the folder gets indexed. */
@@ -504,8 +537,9 @@ final class StudioBridge {
     public String searchKnowledge(String query) {
         JSONArray out = new JSONArray();
         try {
-            for (com.tune2ai.sdk.api.RetrievedChunk c : ai.getKnowledge().searchBlocking(query, 3)) {
+            for (com.tune2ai.sdk.api.RetrievedChunk c : ai.getKnowledge().searchBlocking(query, ai.getKnowledge().getPassagesPerAnswer())) {
                 out.put(new JSONObject().put("source", c.getSourceName()).put("index", c.getIndex() + 1)
+                        .put("ref", c.getRef()).put("section", c.getSection() == null ? "" : c.getSection())
                         .put("text", c.getText()).put("score", c.getScore()).put("smart", c.getByEmbedding()));
             }
         } catch (JSONException | RuntimeException e) {

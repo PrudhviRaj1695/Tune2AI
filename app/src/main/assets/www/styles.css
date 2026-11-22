@@ -208,6 +208,78 @@ h1, h2, h3, p { margin: 0; }
 }
 /* steps(1): two repaints per second instead of 60, cheap on software-rendered devices */
 @keyframes blink { 50% { opacity: .2; } }
+/* Rich replies (markdown.js) */
+.answer > :first-child { margin-top: 0; }
+.answer > :last-child { margin-bottom: 0; }
+.answer p { margin: 0 0 12px; }
+.answer .md-h { margin: 18px 0 8px; color: var(--ink); font-weight: 680; letter-spacing: -.01em; line-height: 1.3; }
+.answer h3.md-h { font-size: 18px; }
+.answer h4.md-h { font-size: 16px; }
+.answer h5.md-h, .answer h6.md-h { font-size: 15px; }
+.answer strong { font-weight: 650; color: var(--ink); }
+.answer ul, .answer ol { margin: 0 0 12px; padding-left: 22px; }
+.answer li { margin: 4px 0; padding-left: 2px; }
+.answer li::marker { color: var(--ink-3); }
+.answer ol > li::marker { font-variant-numeric: tabular-nums; font-weight: 600; }
+.answer li > ul, .answer li > ol { margin: 4px 0 0; }
+.answer .md-task { list-style: none; margin-left: -20px; display: flex; gap: 8px; align-items: baseline; }
+.md-check { width: 15px; height: 15px; flex: none; border: 1.5px solid var(--ink-3); border-radius: 4px; transform: translateY(2px); }
+.md-check.is-done { border-color: var(--live); background: var(--live) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / 11px no-repeat; }
+.answer code { padding: 1px 5px; border-radius: 5px; background: var(--surface-2); font: .88em/1.4 var(--mono); }
+.answer blockquote { margin: 0 0 12px; padding: 2px 0 2px 14px; border-left: 3px solid var(--surface-3); color: var(--ink-2); }
+.answer hr { margin: 16px 0; border: 0; border-top: 1px solid var(--line); }
+.md-link { color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 2px; }
+.md-code { margin: 0 0 12px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.md-code-head { display: flex; align-items: center; justify-content: space-between; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); color: var(--ink-3); font: 600 11px var(--mono); text-transform: lowercase; }
+.md-copy { min-height: 26px; padding: 0 10px; border: 0; border-radius: 7px; background: none; color: var(--ink-2); font: 600 12px var(--font); }
+.md-copy:hover { background: var(--surface-3); }
+.md-code pre { margin: 0; padding: 12px; overflow-x: auto; font: 12.5px/1.55 var(--mono); white-space: pre; }
+.md-code pre code { padding: 0; background: none; font: inherit; }
+.md-table { margin: 0 0 12px; overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+.md-table table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+.md-table th, .md-table td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.md-table th { background: var(--surface-2); color: var(--ink-2); font-size: 12px; font-weight: 650; white-space: nowrap; }
+.md-table tr:last-child td { border-bottom: 0; }
+.answer.is-streaming > p:last-child::after,
+.answer.is-streaming > ul:last-child > li:last-child::after,
+.answer.is-streaming > ol:last-child > li:last-child::after {
+  content: ""; display: inline-block; width: 7px; height: 1.05em; margin-left: 2px; vertical-align: -.15em;
+  border-radius: 2px; background: var(--ink); animation: blink 1s steps(1) infinite;
+}
+
+/* Citations: [1] in the text, numbered source chips under the reply, and the passage they open */
+.cite {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin: 0 1px; padding: 0 4px; border: 0;
+  border-radius: 6px; background: var(--surface-3); color: var(--ink-2); font: 700 11px/1 var(--font); vertical-align: 2px;
+}
+.cite.is-open, .cite:hover { background: var(--ink); color: var(--bg); }
+.answer-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.answer-sources-label { color: var(--ink-3); font-size: 12px; font-weight: 600; margin-right: 2px; }
+.source-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 28px; padding: 0 10px 0 4px;
+  border: 1px solid var(--line); border-radius: 99px; background: var(--surface); color: var(--ink-2); font-size: 12px;
+}
+.source-chip b { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--surface-2); color: var(--ink); font-size: 11px; }
+.source-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.source-chip.is-open { border-color: var(--ink); color: var(--ink); }
+.passage { padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); animation: rise .2s var(--ease); }
+.passage-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 13px; }
+.passage-head b { display: grid; place-items: center; width: 20px; height: 20px; flex: none; border-radius: 50%; background: var(--ink); color: var(--bg); font-size: 11px; }
+.passage-head span { margin-left: auto; color: var(--ink-3); font-size: 12px; white-space: nowrap; }
+.passage p { margin: 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.55; white-space: pre-line; }
+.passage-missing { color: var(--ink-3) !important; }
+.foot-action { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 8px; background: none; color: var(--ink-3); }
+.foot-action .icon { width: 16px; height: 16px; }
+.foot-action:hover { background: var(--surface-2); color: var(--ink); }
+.msg-foot { gap: 2px; margin-left: -6px; }
+.msg-foot .stats { margin-left: 6px; }
+
+/* Sources tuning */
+.tuning { margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 14px; }
+.strictness .range-label { margin-bottom: 8px; }
+.segmented.three { grid-template-columns: repeat(3, 1fr); }
+.strictness .hint { margin-top: 6px; }
+
 .thinking { color: var(--ink-3); font-size: 13px; }
 .thinking::after { content: "…"; animation: blink 1s steps(1) infinite; }
 

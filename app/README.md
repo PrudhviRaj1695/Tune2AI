@@ -30,7 +30,17 @@ The **Sources** tab (next to Chat) connects things on the phone to the SDK's kno
 
 Supported: plain text, Markdown, CSV/TSV, JSON, XML, HTML (tags stripped), Word (.docx), subtitles, config files, and source code; up to 4 MB per file, first 400,000 characters indexed. PDFs and images are skipped for now. Studio uses the system file picker (Storage Access Framework), so it needs no storage permission and only sees what you pick.
 
+**Answer quality** (under the switch): *Passages per answer* (1–8, default 3) trades speed for context; *Match strictness* (Loose / Balanced / Strict) sets how close a meaning-based match must be. Loosen it when answers miss things you know are in your files, tighten it when unrelated passages show up.
+
+How retrieval works: documents are split into ~200-token chunks along paragraphs and sentences, and each chunk remembers its Markdown section. Each question is answered from a hybrid of meaning-based search (when the search model is installed) and keyword search, merged with reciprocal rank fusion; neighbouring chunks are joined into one passage, and one document supplies at most two passages unless it is the only match. Passages reach the model numbered, with an instruction to cite them.
+
 Search works right away by keyword (BM25). **Search by meaning** downloads BGE small (37 MB, an embedding model); Studio then re-indexes existing documents so search also finds passages that say the same thing in other words. **Try a search** shows exactly which passages a question would retrieve.
+
+## Replies
+
+Replies render Markdown as they stream: headings, lists (nested and checklists), tables, code blocks with a Copy button, quotes, and bold or italic text. All HTML from the model is escaped. The system prompt (v4) asks for this structure. When an answer used your sources, citation markers like [1] are tappable and open the exact passage the model was given; numbered source chips sit under the reply. Each reply has Copy (plain text) and Ask again.
+
+Renderer checks: `node app/src/test/js/markdown.test.js` (also run in CI).
 
 ## Remote endpoints
 
@@ -63,6 +73,9 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 19 | Sources → Search by meaning → Get | Downloads 37 MB, then "Upgrading search" re-indexes; documents show "Meaning" |
 | 20 | Turn off "Use sources in chat", ask the question from 15 again | No "From …" line; Run trace has no Source entries |
 | 21 | Try a search: a word that is in no document | "No passage matches" |
+| 22 | Ask "Compare tea and coffee in a table" | A bordered table, not pipe characters; code questions show a code block with Copy |
+| 23 | With test 15's note, tap the [1] in the answer | The passage card opens under the reply with "Parking"; tap again to close |
+| 24 | Sources → Strict, ask something only loosely related to a document | Fewer or no "Sources" chips than with Loose |
 | 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.

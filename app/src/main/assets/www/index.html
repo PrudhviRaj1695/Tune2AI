@@ -7,6 +7,7 @@
     <meta name="description" content="Tune2AI Studio playground: run chat, agent, and workflow requests and inspect every step of the route." />
     <title>Tune2AI Studio</title>
     <link rel="stylesheet" href="./styles.css" />
+    <script src="./markdown.js" defer></script>
     <script src="./app.js" defer></script>
   </head>
   <body>
@@ -35,6 +36,7 @@
       <symbol id="i-share" viewBox="0 0 24 24"><circle cx="17.5" cy="5.5" r="2.5" /><circle cx="6.5" cy="12" r="2.5" /><circle cx="17.5" cy="18.5" r="2.5" /><path d="M8.7 10.8l6.6-4M8.7 13.2l6.6 4" /></symbol>
       <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4" /></symbol>
       <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4.5 4.5" /></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="11" height="11" rx="2.2" /><path d="M15.5 8.5V6.2a1.7 1.7 0 0 0-1.7-1.7H6.2a1.7 1.7 0 0 0-1.7 1.7v7.6c0 .9.8 1.7 1.7 1.7h2.3" /></symbol>
       <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></symbol>
     </svg>
 
@@ -93,6 +95,22 @@
               <span><strong>Use sources in chat</strong><small id="sources-summary">No documents yet</small></span>
               <input type="checkbox" role="switch" id="sources-switch" checked />
             </label>
+            <div class="tuning" id="tuning">
+              <label class="range">
+                <span class="range-label">Passages per answer <output id="passages-value">3</output></span>
+                <input id="passages" type="range" min="1" max="8" step="1" value="3" />
+                <span class="range-ends" aria-hidden="true"><span>Focused, faster</span><span>More context</span></span>
+              </label>
+              <div class="strictness">
+                <span class="range-label">Match strictness</span>
+                <div class="segmented three" role="radiogroup" aria-label="Match strictness">
+                  <label><input type="radio" name="strictness" value="0.45" /><span>Loose</span></label>
+                  <label><input type="radio" name="strictness" value="0.55" checked /><span>Balanced</span></label>
+                  <label><input type="radio" name="strictness" value="0.65" /><span>Strict</span></label>
+                </div>
+                <p class="hint" id="strictness-hint">Balanced suits most documents.</p>
+              </div>
+            </div>
           </div>
 
           <div id="sources-progress"></div>
@@ -204,7 +222,7 @@
 
         <fieldset class="group">
           <legend>System prompt</legend>
-          <div class="card prompt-card">Be concise, accurate, and use supplied context when relevant.</div>
+          <div class="card prompt-card">You are a helpful assistant running privately on the user's phone. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, <b>bold</b> for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.</div>
         </fieldset>
 
         <fieldset class="group">
