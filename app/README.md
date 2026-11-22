@@ -19,6 +19,19 @@ Studio runs GGUF models with llama.cpp.
 
   Restart the app afterwards (`MSYS_NO_PATHCONV=1` is only needed in Git Bash on Windows).
 
+## Sources (RAG)
+
+The **Sources** tab (next to Chat) connects things on the phone to the SDK's knowledge index (`Tune2AI.knowledge`). While **Use sources in chat** is on, every Chat and Agent request includes the up to three passages most relevant to the message; the reply shows "From <file>" and Run trace lists each passage.
+
+- **Folder:** pick a folder in the system picker. Studio keeps read access and indexes every supported file in it (and in subfolders, up to 2,000 files). The refresh button re-reads changed files and drops deleted ones.
+- **Files:** pick one or more documents from the phone, Drive, or any file app.
+- **Note:** type or paste text.
+- **Any app:** Share → Tune2AI Studio from Chrome, Gmail, Keep, Files, and others adds the shared text or files.
+
+Supported: plain text, Markdown, CSV/TSV, JSON, XML, HTML (tags stripped), Word (.docx), subtitles, config files, and source code; up to 4 MB per file, first 400,000 characters indexed. PDFs and images are skipped for now. Studio uses the system file picker (Storage Access Framework), so it needs no storage permission and only sees what you pick.
+
+Search works right away by keyword (BM25). **Search by meaning** downloads BGE small (37 MB, an embedding model); Studio then re-indexes existing documents so search also finds passages that say the same thing in other words. **Try a search** shows exactly which passages a question would retrieve.
+
 ## Remote endpoints
 
 Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible API (base URL ending in `/v1`, API key, model name). The key stays in memory and is forgotten when the app closes. Release builds require HTTPS; debug builds also allow `http://10.0.2.2` (your development machine, as seen from the emulator) for local servers.
@@ -43,6 +56,13 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
 | 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |
+| 15 | Sources → Note: "Parking: level 3, spot 42". Chat: "Where did I park?" | Reply mentions level 3, spot 42; under it "From Parking"; Run trace lists `Source · Parking, passage 1` |
+| 16 | Sources → Folder: pick a folder with a few .md/.txt files | Progress card counts files; Documents lists them; the folder shows "N files indexed" |
+| 17 | Edit one file in that folder, tap refresh | Only that file is re-indexed; delete a file and refresh: it disappears |
+| 18 | Chrome → any article → Share → Tune2AI Studio | Studio opens on Sources and adds the page text |
+| 19 | Sources → Search by meaning → Get | Downloads 37 MB, then "Upgrading search" re-indexes; documents show "Meaning" |
+| 20 | Turn off "Use sources in chat", ask the question from 15 again | No "From …" line; Run trace has no Source entries |
+| 21 | Try a search: a word that is in no document | "No passage matches" |
 | 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.

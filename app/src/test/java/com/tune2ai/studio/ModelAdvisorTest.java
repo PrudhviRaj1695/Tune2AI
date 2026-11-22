@@ -62,6 +62,14 @@ public class ModelAdvisorTest {
         for (ModelAdvisor.Entry c : ModelAdvisor.CATALOG) assertTrue(c.url.startsWith("https://huggingface.co/"));
     }
 
+    @Test
+    public void embeddingModelIsDownloadableButNeverRecommendedForChat() {
+        assertEquals(ModelAdvisor.EMBEDDER, ModelAdvisor.find("bge-small-en-v1.5-q8_0"));
+        for (ModelAdvisor.Assessment a : ModelAdvisor.assess(12 * GB, PLENTY, true)) {
+            assertTrue(a.entry != ModelAdvisor.EMBEDDER);
+        }
+    }
+
     private static String best(long totalRam) {
         return bestOf(ModelAdvisor.assess(totalRam, PLENTY, true));
     }

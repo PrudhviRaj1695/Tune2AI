@@ -52,7 +52,7 @@ const MODES = {
   },
 };
 
-const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null };
+const state = { view: "chat", mode: "Chat", execution: "local", model: "llama", memory: true, run: null, hasRun: false, sources: null };
 const els = {
   conversation: $("#conversation"),
   empty: $("#empty-state"),
@@ -198,7 +198,8 @@ function renderCatalog() {
 
 function startDownload(id) {
   if (Object.keys(downloads).length) return;
-  const m = device.models.find((x) => x.id === id);
+  const m = device.models.find((x) => x.id === id) || (knowledge?.embedder.id === id ? knowledge.embedder : null);
+  if (!m) return;
   downloads[id] = { received: 0, total: m.sizeBytes };
   renderCatalog();
   renderMode();
@@ -223,9 +224,15 @@ function onDownload(e) {
     delete downloads[e.id];
     clearInterval(previewTimer);
     if (e.state === "done") {
+      const embedder = knowledge?.embedder.id === e.id;
       if (live) {
-        state.model = e.id;
+        if (!embedder) state.model = e.id;
         loadLiveModels();
+      } else if (embedder) {
+        Object.assign(knowledge, { embeddingModel: e.id });
+        knowledge.embedder.installed = true;
+        knowledge.sources.forEach((src) => { src.smart = true; });
+        toast(`${knowledge.embedder.name} is ready. Search now matches by meaning.`);
       } else {
         device.models.find((m) => m.id === e.id).installed = true;
         toast(`${device.models.find((m) => m.id === e.id).name} is ready.`);
@@ -235,6 +242,8 @@ function onDownload(e) {
   if (e.state !== "running" && live) loadDevice();
   else renderCatalog();
   renderMode();
+  if (live && e.state !== "running") loadKnowledge();
+  else renderKnowledge();
 }
 
 document.addEventListener("click", (event) => {
@@ -246,10 +255,177 @@ document.addEventListener("click", (event) => {
   }
 });
 
+/* ---------- Views: Chat and Sources ---------- */
+function showView(view) {
+  state.view = view;
+  $$(".view-tabs [role=tab]").forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.view === view)));
+  $("#chat-view").hidden = view !== "chat";
+  $("#sources-view").hidden = view !== "sources";
+  if (view === "sources") loadKnowledge();
+}
+$$(".view-tabs [role=tab]").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
+
+/* ---------- Sources: files and apps the model can search (RAG through the SDK's knowledge API) ----------
+   In a browser preview there is no bridge; a sample index stands in. */
+const PREVIEW_KNOWLEDGE = {
+  enabled: true,
+  embeddingModel: null,
+  embedder: { id: "bge-small-en-v1.5-q8_0", name: "BGE small (search)", sizeBytes: 36806944, installed: false, downloading: false },
+  indexing: null,
+  folders: [{ uri: "preview:Documents", name: "Documents", files: 2 }],
+  sources: [
+    { id: "preview:trip", name: "Lisbon trip.md", kind: "file", path: "Travel/Lisbon trip.md", inFolder: true, chunks: 4, characters: 3120, addedAt: Date.now() - 36e5, smart: false },
+    { id: "preview:rota", name: "On-call rota.csv", kind: "file", path: "Work/On-call rota.csv", inFolder: true, chunks: 2, characters: 1410, addedAt: Date.now() - 72e5, smart: false },
+    { id: "preview:wifi", name: "Home Wi-Fi", kind: "note", path: "", inFolder: false, chunks: 1, characters: 96, addedAt: Date.now() - 864e5, smart: false },
+    { id: "preview:article", name: "How llama.cpp quantization works", kind: "shared", path: "", inFolder: false, chunks: 9, characters: 7020, addedAt: Date.now() - 1728e5, smart: false },
+  ],
+};
+let knowledge = null;
+
+function loadKnowledge() {
+  knowledge = live ? JSON.parse(bridge.knowledgeStatus()) : knowledge || structuredClone(PREVIEW_KNOWLEDGE);
+  if (knowledge.embedder.downloading && !downloads[knowledge.embedder.id]) downloads[knowledge.embedder.id] = { received: 0, total: knowledge.embedder.sizeBytes };
+  renderKnowledge();
+  renderRuntime(); // the Sources context pill and trace list depend on it
+}
+
+const ago = (ms) => {
+  const m = Math.round((Date.now() - ms) / 6e4);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+const KIND_ICON = { file: "i-file", note: "i-note", shared: "i-share" };
+
+function renderKnowledge() {
+  if (!knowledge) return;
+  const k = knowledge;
+  const chunks = k.sources.reduce((n, src) => n + src.chunks, 0);
+  $("#sources-switch").checked = k.enabled;
+  $("#sources-summary").textContent = k.sources.length
+    ? `${k.sources.length} document${k.sources.length === 1 ? "" : "s"} · ${chunks} passages · ${k.embeddingModel ? "search by meaning" : "keyword search"}`
+    : "Connect a folder, files, or a note below.";
+  const count = $("#sources-count");
+  count.hidden = !k.sources.length;
+  count.textContent = k.sources.length;
+
+  const ix = k.indexing;
+  $("#sources-progress").innerHTML = ix ? `
+    <div class="card progress-card">
+      <div class="progress-head"><strong>${escapeHtml(ix.label)}…</strong><span>${ix.total ? `${ix.done} of ${ix.total}` : ""}</span></div>
+      <div class="meter"><span style="width:${ix.total ? (ix.done / ix.total) * 100 : 5}%"></span></div>
+      ${ix.current ? `<small>${escapeHtml(ix.current)}</small>` : ""}
+    </div>` : "";
+
+  const e = k.embedder;
+  const dl = downloads[e.id];
+  $("#sources-embedder").innerHTML = e.installed ? "" : `
+    <div class="card upgrade-card">
+      <div class="model-text">
+        <strong>Search by meaning</strong>
+        <small>${dl ? `Downloading ${gb(dl.received)} of ${gb(dl.total)}` : `Right now search matches words. Download ${escapeHtml(e.name)} (${gb(e.sizeBytes)}) to also find passages that say the same thing differently.`}</small>
+        ${dl ? `<div class="meter"><span style="width:${(dl.received / dl.total) * 100}%"></span></div>` : ""}
+      </div>
+      ${dl ? `<button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button>`
+        : `<button class="pill-button" type="button" data-download="${e.id}" ${Object.keys(downloads).length ? "disabled" : ""}>${svgIcon("i-download")}Get</button>`}
+    </div>`;
+
+  $("#folders-group").hidden = !k.folders.length;
+  $("#folders-list").innerHTML = k.folders.map((f) => `
+    <div class="list-row">
+      <span class="row-icon">${svgIcon("i-folder")}</span>
+      <span class="model-text"><strong>${escapeHtml(f.name)}</strong><small>${f.files} file${f.files === 1 ? "" : "s"} indexed</small></span>
+      <button class="icon-button small" type="button" data-k="refresh" aria-label="Check ${escapeHtml(f.name)} for changes" ${ix ? "disabled" : ""}>${svgIcon("i-refresh")}</button>
+      <button class="icon-button small" type="button" data-remove-folder="${escapeHtml(f.uri)}" aria-label="Disconnect ${escapeHtml(f.name)}">${svgIcon("i-close")}</button>
+    </div>`).join("");
+
+  $("#sources-list").innerHTML = k.sources.length ? k.sources.map((src) => `
+    <div class="list-row">
+      <span class="row-icon">${svgIcon(KIND_ICON[src.kind] || "i-file")}</span>
+      <span class="model-text">
+        <strong>${escapeHtml(src.name)}</strong>
+        <small>${escapeHtml([src.path && src.path !== src.name ? src.path : null, `${src.chunks} passage${src.chunks === 1 ? "" : "s"}`, ago(src.addedAt)].filter(Boolean).join(" · "))}</small>
+      </span>
+      ${src.smart ? '<span class="chip">Meaning</span>' : ""}
+      ${src.inFolder ? "" : `<button class="icon-button small" type="button" data-remove-source="${escapeHtml(src.id)}" aria-label="Remove ${escapeHtml(src.name)}">${svgIcon("i-close")}</button>`}
+    </div>`).join("") : `<p class="empty-row">Nothing here yet. Connected documents appear here.</p>`;
+}
+
+/* Preview only: pretend to index something. */
+function previewIndex(label, add) {
+  knowledge.indexing = { label, done: 0, total: 3, current: "" };
+  renderKnowledge();
+  let n = 0;
+  const t = setInterval(() => {
+    n++;
+    knowledge.indexing = n < 3 ? { label, done: n, total: 3, current: `File ${n + 1}` } : null;
+    if (!knowledge.indexing) {
+      clearInterval(t);
+      knowledge.sources.unshift(...add);
+      toast(`Added ${add.length} document${add.length === 1 ? "" : "s"}.`);
+    }
+    renderKnowledge();
+    renderRuntime();
+  }, 500);
+}
+
+document.addEventListener("click", (event) => {
+  const k = event.target.closest("[data-k]")?.dataset.k;
+  const remove = event.target.closest("[data-remove-source]")?.dataset.removeSource;
+  const removeFolder = event.target.closest("[data-remove-folder]")?.dataset.removeFolder;
+  if (k === "folder") live ? bridge.addKnowledgeFolder() : previewIndex("Indexing Notes", [
+    { id: `preview:${Date.now()}`, name: "Meeting notes.md", kind: "file", path: "Notes/Meeting notes.md", inFolder: true, chunks: 3, characters: 2100, addedAt: Date.now(), smart: !!knowledge.embeddingModel },
+  ]);
+  if (k === "files") live ? bridge.addKnowledgeFiles() : previewIndex("Indexing files", [
+    { id: `preview:${Date.now()}`, name: "Lease agreement.docx", kind: "file", path: "", inFolder: false, chunks: 12, characters: 9400, addedAt: Date.now(), smart: !!knowledge.embeddingModel },
+  ]);
+  if (k === "note") { $("#note-form").hidden = false; $("#note-text").focus(); }
+  if (k === "note-cancel") $("#note-form").hidden = true;
+  if (k === "refresh") live ? bridge.refreshKnowledge() : previewIndex("Checking folders for changes", []);
+  if (remove) {
+    if (live) bridge.removeKnowledgeSource(remove);
+    else { knowledge.sources = knowledge.sources.filter((src) => src.id !== remove); renderKnowledge(); renderRuntime(); }
+  }
+  if (removeFolder) {
+    if (live) bridge.removeKnowledgeFolder(removeFolder);
+    else { knowledge.folders = knowledge.folders.filter((f) => f.uri !== removeFolder); knowledge.sources = knowledge.sources.filter((src) => !src.inFolder); renderKnowledge(); renderRuntime(); }
+  }
+});
+
+$("#note-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const title = $("#note-title").value.trim();
+  const text = $("#note-text").value.trim();
+  if (!text) return toast("Write something first.");
+  if (live) bridge.addKnowledgeNote(title, text);
+  else previewIndex("Adding note", [{ id: `preview:${Date.now()}`, name: title || text.split("\n")[0].slice(0, 48), kind: "note", path: "", inFolder: false, chunks: 1, characters: text.length, addedAt: Date.now(), smart: !!knowledge.embeddingModel }]);
+  $("#note-title").value = "";
+  $("#note-text").value = "";
+  $("#note-form").hidden = true;
+});
+
+$("#sources-switch").addEventListener("change", (event) => {
+  knowledge.enabled = event.target.checked;
+  bridge?.setKnowledgeEnabled(event.target.checked);
+  renderKnowledge();
+  renderRuntime();
+});
+
+$("#search-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const q = $("#search-input").value.trim();
+  if (!q) return;
+  const hits = live ? JSON.parse(bridge.searchKnowledge(q))
+    : knowledge.sources.length ? [{ source: knowledge.sources[0].name, index: 1, text: "Sample passage: in the app this shows the exact text the model would receive.", score: 0.71, smart: !!knowledge.embeddingModel }] : [];
+  $("#search-results").innerHTML = hits.length ? hits.map((h) => `
+    <div class="hit">
+      <div class="hit-head"><strong>${escapeHtml(h.source)}</strong><span>passage ${h.index} · ${h.smart ? `${Math.round(h.score * 100)}% match` : "keyword match"}</span></div>
+      <p>${escapeHtml(h.text.length > 360 ? `${h.text.slice(0, 360)}…` : h.text)}</p>
+    </div>`).join("") : `<p class="empty-row">No passage matches. The model would answer without your sources.</p>`;
+});
+
 function loadLiveModels() {
   const all = JSON.parse(bridge.listModels());
   state.remoteModel = all.find((m) => m.format === "remote") || null;
-  const list = all.filter((m) => m.format !== "remote");
+  const list = all.filter((m) => m.format !== "remote" && (m.tasks || ["CHAT"]).includes("CHAT"));
   MODELS = Object.fromEntries(list.map((m) => [m.id, {
     name: m.name,
     short: m.name.length > 18 ? `${m.name.slice(0, 17)}…` : m.name,
@@ -274,7 +450,7 @@ function contextItems() {
     { label: "Prompt v3", detail: "Helpful assistant v3" },
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
-    !live && state.rag && { label: "RAG", detail: "RAG sources · 3 chunks" },
+    knowledge?.enabled && knowledge.sources.length && { label: "Sources", detail: `Your sources · best ${knowledge.embeddingModel ? "matches" : "keyword matches"}, up to 3` },
   ].filter(Boolean);
 }
 
@@ -302,6 +478,7 @@ function describeSource(source) {
   const [kind, value = ""] = source.replace(/^omitted /, "").split(/:(.*)/s);
   if (omitted) return `Trimmed · ${value}`;
   if (kind === "prompt") return `Prompt ${value.replace("@", " v")}`;
+  if (kind === "rag") return `Source · ${value.replace(/#(\d+)$/, ", passage $1")}`;
   return `${kind[0].toUpperCase()}${kind.slice(1)} · ${value}`;
 }
 
@@ -343,7 +520,6 @@ $("#model-list").addEventListener("change", (event) => {
   renderRuntime();
 });
 $("#memory-switch").addEventListener("change", (event) => { state.memory = event.target.checked; renderRuntime(); });
-$("#rag-switch").addEventListener("change", (event) => { state.rag = event.target.checked; renderRuntime(); });
 
 function bindRange(input, output, format) {
   const update = () => {
@@ -360,7 +536,7 @@ bindRange($("#max-tokens"), $("#token-value"), (n) => n.toLocaleString("en-US"))
 /* ---------- Modes and empty state ---------- */
 function renderMode() {
   const mode = MODES[state.mode];
-  $$('[role="tab"]').forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.mode === state.mode)));
+  $$('.tabs [role="tab"]').forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.mode === state.mode)));
   const needsModel = live && state.mode !== "Workflow" && state.execution === "local" && Object.keys(MODELS).length === 0;
   const best = bestModel();
   const dlId = Object.keys(downloads)[0];
@@ -385,7 +561,7 @@ document.addEventListener("click", (event) => {
   const link = event.target.closest("[data-goto]");
   if (link) $(`[role="tab"][data-mode="${link.dataset.goto}"]`).click();
 });
-$$('[role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
+$$('.tabs [role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
   state.mode = tab.dataset.mode;
   renderMode();
 }));
@@ -515,6 +691,8 @@ window.tune2ai = {
   onModelsChanged: () => loadLiveModels(),
   onNotice: (text) => toast(text),
   onDownload: (e) => onDownload(e),
+  onKnowledgeChanged: () => loadKnowledge(),
+  onOpenSources: () => showView("sources"),
 };
 
 /* ---------- Conversation ---------- */
@@ -597,6 +775,7 @@ function run(text) {
   const remote = state.execution === "remote";
   const requestId = `req_${crypto.getRandomValues(new Uint32Array(1))[0].toString(16).padStart(8, "0")}`;
   let firstMs = null;
+  let usedSources = [];
 
   $("#request-id").textContent = requestId;
   renderTimeline(steps, 0);
@@ -614,6 +793,7 @@ function run(text) {
       if (event.index > 0) $(".step-time", items[event.index - 1]).textContent = `${event.ms} ms`;
       if (event.detail) $(".step-text small", items[event.index]).textContent = event.detail;
       if (event.sources?.length) {
+        usedSources = [...new Set(event.sources.filter((src) => src.startsWith("rag:")).map((src) => src.slice(4).replace(/#\d+$/, "")))];
         state.sources = event.sources;
         $("#included-list").innerHTML = event.sources.map((s) => `<li>${svgIcon("i-check")}${describeSource(s)}</li>`).join("");
       }
@@ -644,6 +824,7 @@ function run(text) {
       setStatus("ok", "Completed");
       setMetrics(`${((firstMs ?? 0) / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
       foot.innerHTML = `<button class="stats" type="button" data-open="trace" aria-label="Open run trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s</button>`;
+      if (usedSources.length) foot.insertAdjacentHTML("beforeend", `<span class="used-sources">${svgIcon("i-file")}From ${usedSources.map(escapeHtml).join(", ")}</span>`);
     } else {
       items.forEach((li) => { if (li.dataset.state === "active") li.dataset.state = "cancelled"; });
       const failed = result === "failed";
@@ -719,8 +900,7 @@ if (live) {
   // Not wired in Studio yet: memory (T2AI-025), RAG (T2AI-024).
   $(".sim-badge").hidden = true;
   state.memory = false;
-  state.rag = false;
-  [["#memory-switch", "Arrives with the memory engine (T2AI-025)"], ["#rag-switch", "Arrives with the RAG engine (T2AI-024)"]].forEach(([id, note]) => {
+  [["#memory-switch", "Arrives with the memory engine (T2AI-025)"]].forEach(([id, note]) => {
     const input = $(id);
     input.checked = false;
     input.disabled = true;
@@ -731,6 +911,8 @@ if (live) {
   loadLiveModels();
 }
 if (!live) loadDevice();
+loadKnowledge();
+if (live && bridge.takeOpenSources()) showView("sources");
 renderModels();
 renderRuntime();
 renderMode();

@@ -52,6 +52,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class StudioBridge {
     static final int IMPORT_REQUEST = 41;
+    static final int FOLDER_REQUEST = 42;
+    static final int FILES_REQUEST = 43;
     private static final String SESSION = "studio";
     private static final int CONTEXT_LENGTH = ModelAdvisor.CONTEXT_LENGTH;
     private static final String REMOTE_MODEL_ID = "remote-model";
@@ -66,6 +68,9 @@ final class StudioBridge {
     private final AtomicBoolean downloadCancelled = new AtomicBoolean();
     private volatile String downloadingId;
     private final Map<String, Cancellable> running = new ConcurrentHashMap<>();
+    private final KnowledgeConnector connector;
+    private final ExecutorService indexer = Executors.newSingleThreadExecutor();
+    private volatile JSONObject indexing; // current indexing progress, or null
 
     StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote) {
         this.activity = activity;
@@ -73,6 +78,8 @@ final class StudioBridge {
         this.ai = ai;
         this.remote = remote;
         this.modelsDir = new File(activity.getFilesDir(), "models");
+        this.connector = new KnowledgeConnector(activity, ai.getKnowledge());
+        ai.getKnowledge().setEnabled(activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE).getBoolean("enabled", true));
         io.execute(this::registerModelsInStorage);
     }
 
@@ -170,6 +177,7 @@ final class StudioBridge {
                 o.put("format", m.getFormat());
                 o.put("sizeBytes", new File(m.getPath()).length());
                 o.put("memoryBytes", m.getMemoryBytes());
+                o.put("tasks", new JSONArray(m.getTasks().stream().map(Enum::name).collect(java.util.stream.Collectors.toList())));
                 o.put("state", state == null ? "Unloaded" : state.getClass().getSimpleName());
                 if (state instanceof ModelState.Unavailable) o.put("reason", ((ModelState.Unavailable) state).getReason());
                 if (state instanceof ModelState.Failed) o.put("reason", ((ModelState.Failed) state).getReason());
@@ -285,6 +293,7 @@ final class StudioBridge {
             modelsChanged();
             downloadEvent(entry.id, "done", entry.sizeBytes, entry.sizeBytes, null);
             notice(entry.name + " is ready.");
+            if (entry == ModelAdvisor.EMBEDDER) reindexKnowledge(); // embed what was indexed by keyword
         } catch (ModelDownloader.CancelledException e) {
             downloadingId = null;
             downloadEvent(entry.id, "cancelled", 0, entry.sizeBytes, null);
@@ -333,6 +342,231 @@ final class StudioBridge {
             return maker + Build.SOC_MODEL;
         }
         return Build.HARDWARE == null ? "" : Build.HARDWARE;
+    }
+
+    // ---------- Sources tab: the knowledge index (RAG) ----------
+
+    /** Everything the Sources tab shows: switch state, search mode, folders, documents, progress. */
+    @JavascriptInterface
+    public String knowledgeStatus() {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("enabled", ai.getKnowledge().getEnabled());
+            String model = ai.getKnowledge().embeddingModel();
+            o.put("embeddingModel", model == null ? JSONObject.NULL : model);
+            JSONObject embedder = new JSONObject();
+            embedder.put("id", ModelAdvisor.EMBEDDER.id);
+            embedder.put("name", ModelAdvisor.EMBEDDER.name);
+            embedder.put("sizeBytes", ModelAdvisor.EMBEDDER.sizeBytes);
+            embedder.put("installed", model != null);
+            embedder.put("downloading", ModelAdvisor.EMBEDDER.id.equals(downloadingId));
+            o.put("embedder", embedder);
+            o.put("indexing", indexing == null ? JSONObject.NULL : indexing);
+
+            java.util.List<com.tune2ai.sdk.api.KnowledgeSource> sources = ai.getKnowledge().sourcesBlocking();
+            JSONArray folders = new JSONArray();
+            for (String uri : connector.folders()) {
+                int files = 0;
+                for (com.tune2ai.sdk.api.KnowledgeSource src : sources) if (uri.equals(src.getMetadata().get("folder"))) files++;
+                folders.put(new JSONObject().put("uri", uri).put("name", KnowledgeConnector.folderName(Uri.parse(uri))).put("files", files));
+            }
+            o.put("folders", folders);
+            JSONArray list = new JSONArray();
+            for (com.tune2ai.sdk.api.KnowledgeSource src : sources) {
+                Map<String, String> meta = src.getMetadata();
+                list.put(new JSONObject()
+                        .put("id", src.getId())
+                        .put("name", src.getName())
+                        .put("kind", meta.containsKey("kind") ? meta.get("kind") : "file")
+                        .put("path", meta.containsKey("path") ? meta.get("path") : "")
+                        .put("inFolder", meta.containsKey("folder"))
+                        .put("chunks", src.getChunks())
+                        .put("characters", src.getCharacters())
+                        .put("addedAt", src.getAddedAtMillis())
+                        .put("smart", src.getEmbeddingModel() != null));
+            }
+            o.put("sources", list);
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        return o.toString();
+    }
+
+    @JavascriptInterface
+    public void setKnowledgeEnabled(boolean enabled) {
+        ai.getKnowledge().setEnabled(enabled);
+        activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE).edit().putBoolean("enabled", enabled).apply();
+    }
+
+    /** Opens the system folder picker; every readable file in the folder gets indexed. */
+    @JavascriptInterface
+    public void addKnowledgeFolder() {
+        activity.runOnUiThread(() -> activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), FOLDER_REQUEST));
+    }
+
+    @JavascriptInterface
+    public void addKnowledgeFiles() {
+        activity.runOnUiThread(() -> activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*")
+                .putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), FILES_REQUEST));
+    }
+
+    void onKnowledgeResult(int requestCode, int resultCode, Intent data) {
+        if (resultCode != Activity.RESULT_OK || data == null) return;
+        if (requestCode == FOLDER_REQUEST && data.getData() != null) {
+            Uri tree = data.getData();
+            runIndexing("Indexing " + KnowledgeConnector.folderName(tree), p -> connector.addFolder(tree, p));
+        } else if (requestCode == FILES_REQUEST) {
+            java.util.List<Uri> uris = urisOf(data);
+            if (!uris.isEmpty()) runIndexing("Indexing files", p -> connector.addFiles(uris, true, "file", p));
+        }
+    }
+
+    private volatile boolean openSourcesOnLoad;
+
+    /** True once after a share arrived before the page was ready: the page then opens the Sources tab. */
+    @JavascriptInterface
+    public boolean takeOpenSources() {
+        boolean open = openSourcesOnLoad;
+        openSourcesOnLoad = false;
+        return open;
+    }
+
+    /** Text or files shared to Studio from another app (Share → Tune2AI Studio). */
+    @SuppressWarnings("deprecation") // typed getParcelable* overloads need API 33
+    void onShare(Intent intent) {
+        String action = intent.getAction();
+        if (!Intent.ACTION_SEND.equals(action) && !Intent.ACTION_SEND_MULTIPLE.equals(action)) return;
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
+            java.util.ArrayList<Uri> many = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
+            if (many != null) uris.addAll(many);
+        } else {
+            Uri one = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+            if (one != null) uris.add(one);
+        }
+        CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        String subject = intent.getStringExtra(Intent.EXTRA_SUBJECT);
+        openSourcesOnLoad = true;
+        callJs("window.tune2ai && window.tune2ai.onOpenSources && window.tune2ai.onOpenSources()");
+        if (!uris.isEmpty()) {
+            runIndexing("Adding shared files", p -> connector.addFiles(uris, false, "shared", p));
+        } else if (text != null && text.toString().trim().length() > 0) {
+            runIndexing("Adding shared text", p -> {
+                KnowledgeConnector.Summary s = new KnowledgeConnector.Summary();
+                connector.addNote(subject, text.toString(), "shared");
+                s.added = 1;
+                return s;
+            });
+        }
+    }
+
+    @JavascriptInterface
+    public void addKnowledgeNote(String title, String text) {
+        if (text == null || text.trim().isEmpty()) {
+            notice("Write something first.");
+            return;
+        }
+        runIndexing("Adding note", p -> {
+            KnowledgeConnector.Summary s = new KnowledgeConnector.Summary();
+            connector.addNote(title, text, "note");
+            s.added = 1;
+            return s;
+        });
+    }
+
+    @JavascriptInterface
+    public void removeKnowledgeSource(String id) {
+        indexer.execute(() -> {
+            ai.getKnowledge().removeBlocking(id);
+            knowledgeChanged();
+        });
+    }
+
+    @JavascriptInterface
+    public void removeKnowledgeFolder(String uri) {
+        indexer.execute(() -> {
+            connector.removeFolder(uri);
+            knowledgeChanged();
+        });
+    }
+
+    @JavascriptInterface
+    public void refreshKnowledge() {
+        runIndexing("Checking folders for changes", connector::refreshFolders);
+    }
+
+    /** Best matches for a test query, as the model would receive them. */
+    @JavascriptInterface
+    public String searchKnowledge(String query) {
+        JSONArray out = new JSONArray();
+        try {
+            for (com.tune2ai.sdk.api.RetrievedChunk c : ai.getKnowledge().searchBlocking(query, 3)) {
+                out.put(new JSONObject().put("source", c.getSourceName()).put("index", c.getIndex() + 1)
+                        .put("text", c.getText()).put("score", c.getScore()).put("smart", c.getByEmbedding()));
+            }
+        } catch (JSONException | RuntimeException e) {
+            notice("Search failed: " + e.getMessage());
+        }
+        return out.toString();
+    }
+
+    private void reindexKnowledge() {
+        runIndexing("Upgrading search", p -> {
+            KnowledgeConnector.Summary s = new KnowledgeConnector.Summary();
+            s.added = ai.getKnowledge().reindexBlocking((done, total) -> p.update(done, total, ""));
+            return s;
+        });
+    }
+
+    private interface IndexJob {
+        KnowledgeConnector.Summary run(KnowledgeConnector.Progress progress) throws Exception;
+    }
+
+    /** Runs one indexing job at a time, reporting progress to the Sources tab. */
+    private void runIndexing(String label, IndexJob job) {
+        indexer.execute(() -> {
+            keepScreenOn(true);
+            try {
+                KnowledgeConnector.Summary s = job.run((done, total, current) -> {
+                    try {
+                        indexing = new JSONObject().put("label", label).put("done", done).put("total", total).put("current", current);
+                    } catch (JSONException ignored) {
+                        // values above are always valid
+                    }
+                    knowledgeChanged();
+                });
+                StringBuilder msg = new StringBuilder();
+                msg.append(s.added == 1 ? "Added 1 document" : "Added " + s.added + " documents");
+                if (s.skipped > 0) msg.append(", skipped ").append(s.skipped).append(" (unsupported type or too large)");
+                if (s.failed > 0) msg.append(", ").append(s.failed).append(" failed");
+                notice(msg + ".");
+                if (s.lastError != null) notice(s.lastError);
+            } catch (Exception e) {
+                notice("Indexing failed: " + e.getMessage());
+            } finally {
+                indexing = null;
+                keepScreenOn(false);
+                knowledgeChanged();
+            }
+        });
+    }
+
+    private static java.util.List<Uri> urisOf(Intent data) {
+        java.util.List<Uri> uris = new java.util.ArrayList<>();
+        if (data.getClipData() != null) {
+            for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
+        } else if (data.getData() != null) {
+            uris.add(data.getData());
+        }
+        return uris;
+    }
+
+    private void knowledgeChanged() {
+        callJs("window.tune2ai && window.tune2ai.onKnowledgeChanged && window.tune2ai.onKnowledgeChanged()");
     }
 
     /** Opens the system file picker for a .gguf model. */
@@ -403,14 +637,16 @@ final class StudioBridge {
         String base = file.getName().substring(0, file.getName().length() - ".gguf".length());
         String id = base.toLowerCase(Locale.ROOT);
         ModelAdvisor.Entry known = ModelAdvisor.find(id); // downloaded from the catalog: use its tidy name
+        boolean embedder = known == ModelAdvisor.EMBEDDER;
+        int context = embedder ? ModelAdvisor.EMBEDDER_CONTEXT : CONTEXT_LENGTH;
         return new ModelDescriptor(
                 id,
                 known != null ? known.name : base.replace('-', ' ').replace('_', ' '),
                 "gguf",
                 file.getPath(),
-                LlamaBackend.estimateMemoryBytes(file, CONTEXT_LENGTH),
-                CONTEXT_LENGTH,
-                Collections.singleton(Task.CHAT),
+                LlamaBackend.estimateMemoryBytes(file, context),
+                context,
+                Collections.singleton(embedder ? Task.EMBEDDING : Task.CHAT),
                 Collections.emptySet(),
                 "1");
     }
@@ -502,6 +738,7 @@ final class StudioBridge {
     void close() {
         for (Cancellable handle : running.values()) handle.cancel();
         downloadCancelled.set(true); // the .partial file stays and resumes next time
+        indexer.shutdownNow();
         downloads.shutdownNow();
         io.shutdownNow();
     }

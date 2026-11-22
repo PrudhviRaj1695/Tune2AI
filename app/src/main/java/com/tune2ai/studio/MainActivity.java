@@ -98,6 +98,14 @@ public final class MainActivity extends Activity {
                     OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::handleBack);
         }
         webView.loadUrl(PAGE_ROOT + "index.html");
+        if (savedInstanceState == null) bridge.onShare(getIntent()); // launched from another app's Share sheet
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        bridge.onShare(intent);
     }
 
     /** Compact, plainly labelled model list: small models misread raw fields like sizeBytes. */
@@ -139,6 +147,7 @@ public final class MainActivity extends Activity {
     @SuppressWarnings("deprecation") // framework Activity API; no AndroidX here
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == StudioBridge.IMPORT_REQUEST) bridge.onImportResult(resultCode, data);
+        else if (requestCode == StudioBridge.FOLDER_REQUEST || requestCode == StudioBridge.FILES_REQUEST) bridge.onKnowledgeResult(requestCode, resultCode, data);
         else super.onActivityResult(requestCode, resultCode, data);
     }
 

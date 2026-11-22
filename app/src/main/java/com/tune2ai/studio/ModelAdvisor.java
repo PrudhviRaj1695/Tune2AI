@@ -63,6 +63,14 @@ final class ModelAdvisor {
             new Entry("Llama 3.2 3B", "bartowski/Llama-3.2-3B-Instruct-GGUF",
                     "Llama-3.2-3B-Instruct-Q4_K_M.gguf", 2_019_377_696L, "Best quality here. Needs a high-end phone.")));
 
+    /**
+     * Embedding model for the Sources tab's semantic search: bge-small-en-v1.5, 384 dimensions,
+     * 512-token input. Small enough to stay loaded next to any chat model, so it is not rated.
+     */
+    static final Entry EMBEDDER = new Entry("BGE small (search)", "CompendiumLabs/bge-small-en-v1.5-gguf",
+            "bge-small-en-v1.5-q8_0.gguf", 36_806_944L, "Finds passages in your files by meaning, not only matching words.");
+    static final int EMBEDDER_CONTEXT = 512;
+
     static final class Assessment {
         final Entry entry;
         final Fit fit;
@@ -116,7 +124,7 @@ final class ModelAdvisor {
 
     static Entry find(String id) {
         for (Entry e : CATALOG) if (e.id.equals(id)) return e;
-        return null;
+        return EMBEDDER.id.equals(id) ? EMBEDDER : null;
     }
 
     static String gb(long bytes) {
