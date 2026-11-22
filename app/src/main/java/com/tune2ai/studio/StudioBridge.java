@@ -73,6 +73,7 @@ final class StudioBridge {
     private final ExecutorService indexer = Executors.newSingleThreadExecutor();
     private volatile JSONObject indexing; // current indexing progress, or null
     private final Connections connections;
+    private final ChatStore chats;
     private volatile String pendingConnect; // connection waiting for a permission answer or a settings visit
 
     StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote, PhoneContextSource phone) {
@@ -82,6 +83,7 @@ final class StudioBridge {
         this.remote = remote;
         this.modelsDir = new File(activity.getFilesDir(), "models");
         this.connector = new KnowledgeConnector(activity, ai.getKnowledge());
+        this.chats = new ChatStore(new File(activity.getFilesDir(), "chats"));
         this.connections = new Connections(activity, ai.getKnowledge(), connector);
         phone.attach(connections);
         indexer.execute(this::syncDueConnections);
@@ -109,11 +111,59 @@ final class StudioBridge {
             String prompt = req.getString("prompt");
             Cancellable handle = "Agent".equals(req.optString("mode"))
                     ? ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event))
-                    : ai.getChat().session(SESSION).stream(prompt, options, event -> deliver(id, event));
+                    : ai.getChat().session(sessionOf(req)).stream(prompt, options, event -> deliver(id, event));
             running.put(id, handle);
         } catch (JSONException e) {
             notice("Could not read the request: " + e.getMessage());
         }
+    }
+
+    /** Each saved chat has its own SDK session (model-facing history) with the same id. */
+    private static String sessionOf(JSONObject req) {
+        String id = req.optString("session");
+        return ChatStore.validId(id) ? "chat-" + id : SESSION;
+    }
+
+    // ---------- Chats list (saved conversations) ----------
+
+    @JavascriptInterface
+    public String listChats() {
+        return chats.list();
+    }
+
+    @JavascriptInterface
+    public String loadChat(String id) {
+        return chats.load(id);
+    }
+
+    @JavascriptInterface
+    public void saveChat(String json) {
+        try {
+            chats.save(json);
+        } catch (JSONException | IOException e) {
+            notice("Could not save this chat: " + e.getMessage());
+        }
+    }
+
+    @JavascriptInterface
+    public void renameChat(String id, String title) {
+        try {
+            chats.rename(id, title);
+        } catch (JSONException | IOException e) {
+            notice("Could not rename this chat: " + e.getMessage());
+        }
+    }
+
+    /** Deletes the saved chat and the model-facing history behind it. */
+    @JavascriptInterface
+    public void deleteChat(String id) {
+        if (!ChatStore.validId(id)) return;
+        try {
+            chats.delete(id);
+        } catch (IOException e) {
+            notice("Could not delete this chat: " + e.getMessage());
+        }
+        ai.getChat().session("chat-" + id).clearAsync();
     }
 
     @JavascriptInterface
@@ -124,9 +174,9 @@ final class StudioBridge {
 
     @JavascriptInterface
     public void newSession() {
+        // A new chat only stops what is running; earlier chats keep their history (Chats list).
         for (Cancellable handle : running.values()) handle.cancel();
         running.clear();
-        ai.getChat().session(SESSION).clearAsync();
     }
 
     /**

@@ -44,6 +44,9 @@
       <symbol id="i-phone" viewBox="0 0 24 24"><path d="M6.5 4h3l1.5 4-2 1.3a10 10 0 0 0 5.7 5.7l1.3-2 4 1.5v3a2 2 0 0 1-2.2 2A16 16 0 0 1 4.5 6.2 2 2 0 0 1 6.5 4z" /></symbol>
       <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="6" height="6" rx="1.6" /><rect x="13.5" y="4.5" width="6" height="6" rx="1.6" /><rect x="4.5" y="13.5" width="6" height="6" rx="1.6" /><rect x="13.5" y="13.5" width="6" height="6" rx="1.6" /></symbol>
       <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.5l7 2.5v5.5c0 4.5-3 7.8-7 9-4-1.2-7-4.5-7-9V6z" /><path d="M9 12l2.2 2.2L15.5 10" /></symbol>
+      <symbol id="i-history" viewBox="0 0 24 24"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3" /><path d="M4.5 4.5v3.7h3.7M12 8v4.3l2.8 1.7" /></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M5 7h14M10 4h4M7 7l.8 12a1.5 1.5 0 0 0 1.5 1.4h5.4a1.5 1.5 0 0 0 1.5-1.4L17 7M10.5 11v5.5M13.5 11v5.5" /></symbol>
+      <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M15.5 4.5l4 4L9 19l-5 1 1-5z" /></symbol>
       <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></symbol>
     </svg>
 
@@ -55,8 +58,9 @@
           <span class="subtitle"><span class="live-dot" aria-hidden="true"></span><span id="runtime-label">On-device · Private</span><span class="sim-badge" title="Replies are simulated in a browser preview">Preview</span></span>
         </button>
         <div class="appbar-actions">
+          <button class="icon-button" type="button" data-open="history" aria-label="Chats" aria-controls="history"><svg class="icon"><use href="#i-history" /></svg></button>
           <button class="icon-button" type="button" data-open="trace" aria-label="Run trace" aria-controls="trace"><svg class="icon"><use href="#i-activity" /></svg><span class="badge-dot" id="trace-dot" hidden></span></button>
-          <button class="icon-button" type="button" id="new-session" aria-label="New session" title="New session"><svg class="icon"><use href="#i-compose" /></svg></button>
+          <button class="icon-button" type="button" id="new-session" aria-label="New chat" title="New chat"><svg class="icon"><use href="#i-compose" /></svg></button>
         </div>
       </header>
 
@@ -258,6 +262,23 @@
             </label>
           </div>
         </fieldset>
+      </div>
+    </aside>
+
+    <!-- Chats: saved conversations -->
+    <aside class="sheet" id="history" aria-labelledby="history-title">
+      <div class="sheet-head">
+        <span class="grabber" aria-hidden="true"></span>
+        <h2 id="history-title">Chats</h2>
+        <button class="pill-button" type="button" data-new-chat><svg class="icon"><use href="#i-compose" /></svg>New chat</button>
+        <button class="icon-button sheet-close" type="button" data-close aria-label="Close chats"><svg class="icon"><use href="#i-close" /></svg></button>
+      </div>
+      <div class="sheet-body">
+        <label class="history-search">
+          <svg class="icon" aria-hidden="true"><use href="#i-search" /></svg>
+          <input id="history-search" type="search" placeholder="Search chats" autocomplete="off" />
+        </label>
+        <div id="history-list"></div>
       </div>
     </aside>
 

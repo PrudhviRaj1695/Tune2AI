@@ -274,6 +274,23 @@ h1, h2, h3, p { margin: 0; }
 .msg-foot { gap: 2px; margin-left: -6px; }
 .msg-foot .stats { margin-left: 6px; }
 
+/* Chats list */
+#history .sheet-head .pill-button { margin-right: 4px; }
+#history .sheet-head .pill-button .icon { width: 15px; height: 15px; }
+.history-search { display: flex; align-items: center; gap: 8px; margin: 2px 0 12px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.history-search .icon { width: 17px; height: 17px; color: var(--ink-3); }
+.history-search input { flex: 1; min-width: 0; min-height: 44px; border: 0; outline: 0; background: none; color: var(--ink); font: 15px var(--font); }
+#history-list .label { margin: 14px 2px 8px; }
+#history-list .card { margin-bottom: 4px; }
+.history-row { gap: 4px; min-height: 64px; padding-right: 8px; }
+.history-open { flex: 1; min-width: 0; padding: 4px 4px 4px 2px; border: 0; background: none; text-align: left; }
+.history-open strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
+.history-open small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-3); font-size: 12px; }
+.history-row.is-current { background: var(--surface-2); }
+.rename-form { flex: 1; display: flex; gap: 8px; padding: 6px 0; }
+.rename-form input { flex: 1; min-width: 0; min-height: 40px; padding: 0 12px; border: 1px solid var(--ink-3); border-radius: 10px; background: var(--surface-2); color: var(--ink); font: 15px var(--font); }
+.pill-button.danger { background: var(--danger); color: #fff; }
+
 /* Connections */
 .conn-status { font-weight: 600; }
 .conn-status.is-on { color: var(--live); }

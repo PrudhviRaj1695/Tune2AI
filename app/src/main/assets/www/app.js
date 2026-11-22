@@ -52,7 +52,7 @@ const MODES = {
   },
 };
 
-const state = { view: "chat", mode: "Chat", execution: "local", model: "llama", memory: true, run: null, hasRun: false, sources: null };
+const state = { chat: null, view: "chat", mode: "Chat", execution: "local", model: "llama", memory: true, run: null, hasRun: false, sources: null };
 const els = {
   conversation: $("#conversation"),
   empty: $("#empty-state"),
@@ -821,6 +821,7 @@ function liveSource(prompt, emit) {
     id,
     prompt,
     mode: state.mode,
+    session: state.chat?.id ?? null,
     model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
     backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),
@@ -973,6 +974,7 @@ function addToolCard(msg, e) {
   $("strong", card).textContent = e.name;
   $("pre", card).textContent = prettyJson(e.arguments);
   $(".tools", msg).append(card);
+  (msg._tools ||= []).push({ callId: e.callId, name: e.name, arguments: e.arguments, result: null, isError: false });
 }
 
 function finishToolCard(msg, e) {
@@ -983,12 +985,17 @@ function finishToolCard(msg, e) {
   const result = document.createElement("pre");
   result.textContent = prettyJson(e.result);
   card.append(result);
+  const saved = (msg._tools || []).find((t) => t.callId === e.callId);
+  if (saved) Object.assign(saved, { result: e.result, isError: e.isError });
 }
 
 function run(text) {
   const simulated = !live || state.mode === "Workflow";
   state.hasRun = true;
   els.empty.hidden = true;
+  if (!state.chat) state.chat = newChat();
+  state.chat.messages.push({ role: "user", text, mode: state.mode, at: Date.now() });
+  if (!state.chat.renamed && state.chat.messages.filter((m) => m.role === "user").length === 1) state.chat.title = chatTitle(text);
   addUserMessage(text);
   const msg = addAssistantMessage(simulated);
   const answer = $(".answer", msg);
@@ -1072,6 +1079,14 @@ function run(text) {
         foot.innerHTML = `<span class="chip" data-state="cancelled">Cancelled</span>`;
       }
     }
+    if (result === "ok" || msg._raw.trim()) {
+      state.chat.messages.push({
+        role: "assistant", text: msg._raw, refs: msg._refs, tools: msg._tools || [], model: model.short,
+        remote, mode: state.mode, status: result,
+        stats: result === "ok" ? { firstMs: firstMs ?? 0, tps: stats.tps } : null, at: Date.now(),
+      });
+      saveChat();
+    }
     if (openSheetId !== "trace") $("#trace-dot").hidden = false;
     delete els.send.dataset.running;
     els.send.setAttribute("aria-label", "Run request");
@@ -1111,11 +1126,76 @@ $("#composer").addEventListener("submit", (event) => {
   run(text);
 });
 
-$("#new-session").addEventListener("click", () => {
-  state.run?.cancel();
-  bridge?.newSession();
+$("#new-session").addEventListener("click", () => startNewChat(true));
+
+/* ---------- Chats: saved conversations ----------
+   The page keeps the transcript (what it needs to redraw a chat) and saves it after every reply:
+   live through the bridge (ChatStore.java, app-private files), in a browser preview to localStorage.
+   The model-facing history is the SDK chat session with the same id. */
+const newChat = () => ({
+  id: `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`,
+  title: "New chat", renamed: false, createdAt: Date.now(), updatedAt: Date.now(), messages: [],
+});
+const chatTitle = (text) => {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length > 48 ? `${t.slice(0, 47)}…` : t || "New chat";
+};
+
+const previewChats = {
+  read() {
+    try { return JSON.parse(localStorage.getItem("t2a.chats") || "null") || previewChats.seed(); } catch { return previewChats.seed(); }
+  },
+  write(all) {
+    try { localStorage.setItem("t2a.chats", JSON.stringify(all)); } catch { /* private mode: keep in memory only */ }
+    previewChats.memory = all;
+  },
+  seed() {
+    if (previewChats.memory) return previewChats.memory;
+    const day = 864e5;
+    const chat = (id, title, ago, q, a) => ({ id, title, renamed: false, createdAt: Date.now() - ago, updatedAt: Date.now() - ago,
+      messages: [{ role: "user", text: q, at: Date.now() - ago }, { role: "assistant", text: a, refs: [], tools: [], model: "Llama 3.2 3B", mode: "Chat", status: "ok", stats: { firstMs: 640, tps: 62 }, at: Date.now() - ago }] });
+    previewChats.memory = {
+      c1: chat("c1", "Plan a weekend in Lisbon", 2 * 36e5, "Plan a weekend in Lisbon", "### Saturday\n\n- **Morning:** Alfama walk and the castle\n- **Afternoon:** Tram 28 to Estrela\n\n### Sunday\n\n- Belém tower and pastéis de nata"),
+      c2: chat("c2", "Explain the 50/30/20 budget rule", day + 4e6, "Explain the 50/30/20 budget rule", "Split take-home pay into **50%** needs, **30%** wants, **20%** savings."),
+      c3: chat("c3", "Compare 3B and 8B models on a phone", 5 * day, "Compare 3B and 8B models on a phone", "| | 3B | 8B |\n|---|---|---|\n| RAM | ~2.5 GB | ~5.5 GB |\n| Speed | Fast | Slow |"),
+      c4: chat("c4", "Draft a release note for chat", 20 * day, "Draft a release note for our chat feature", "**New:** private on-device chat."),
+    };
+    return previewChats.memory;
+  },
+};
+
+function listChats() {
+  if (live) return JSON.parse(bridge.listChats());
+  return Object.values(previewChats.read()).map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, count: c.messages.length,
+    preview: (c.messages.at(-1)?.text || "").replace(/[#*`>|_~-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) }))
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+function loadChat(id) {
+  return live ? JSON.parse(bridge.loadChat(id)) : structuredClone(previewChats.read()[id] || null);
+}
+function saveChat() {
+  if (!state.chat?.messages.length) return;
+  state.chat.updatedAt = Date.now();
+  if (live) bridge.saveChat(JSON.stringify(state.chat));
+  else previewChats.write({ ...previewChats.read(), [state.chat.id]: structuredClone(state.chat) });
+  if (openSheetId === "history") renderHistory();
+}
+function deleteChat(id) {
+  if (live) bridge.deleteChat(id);
+  else { const all = previewChats.read(); delete all[id]; previewChats.write(all); }
+  if (state.chat?.id === id) startNewChat(false);
+  renderHistory();
+  toast("Chat deleted.");
+}
+function renameChat(id, title) {
+  if (live) bridge.renameChat(id, title);
+  else { const all = previewChats.read(); if (all[id]) Object.assign(all[id], { title, renamed: true }); previewChats.write(all); }
+  if (state.chat?.id === id) Object.assign(state.chat, { title, renamed: true });
+  renderHistory();
+}
+
+function resetConversationView() {
   $$(".msg", els.conversation).forEach((m) => m.remove());
-  els.empty.hidden = false;
   $("#request-id").textContent = "No runs yet";
   state.hasRun = false;
   state.sources = null;
@@ -1124,10 +1204,141 @@ $("#new-session").addEventListener("click", () => {
   setStatus("idle", "Idle");
   setMetrics();
   $("#trace-dot").hidden = true;
+}
+
+function startNewChat(announce) {
+  state.run?.cancel();
+  bridge?.newSession();
+  state.chat = null;
+  resetConversationView();
+  els.empty.hidden = false;
   els.prompt.value = "";
   updateSend();
-  toast("New session started.");
+  closeSheet();
+  showView("chat");
+  if (announce) toast("New chat.");
+}
+
+/* Redraws a saved reply: Markdown, tool cards, citations, and actions, as it looked when it ran. */
+function addSavedAssistant(m, prompt) {
+  const msg = document.createElement("article");
+  msg.className = "msg";
+  msg.innerHTML = `
+    <div class="msg-head"><span class="dot" aria-hidden="true"></span><strong></strong><span>${m.remote ? "Remote" : "On-device"}</span>${m.mode && m.mode !== "Chat" ? `<span class="chip">${escapeHtml(m.mode)}</span>` : ""}</div>
+    <div class="tools"></div>
+    <div class="answer"></div>
+    <div class="answer-sources" hidden></div>
+    <div class="passage" hidden></div>
+    <div class="msg-foot"></div>`;
+  $(".msg-head strong", msg).textContent = m.model || "Assistant";
+  els.conversation.append(msg);
+  Object.assign(msg, { _raw: m.text || "", _refs: m.refs || [], _prompt: prompt, _tools: m.tools || [] });
+  (m.tools || []).forEach((t) => {
+    addToolCard(msg, t);
+    if (t.result != null) finishToolCard(msg, t);
+  });
+  msg._tools = m.tools || [];
+  renderAnswer(msg);
+  renderSourceChips(msg);
+  $(".msg-foot", msg).innerHTML = m.status === "cancelled" ? `<span class="chip" data-state="cancelled">Cancelled</span>` : `
+    <button class="foot-action" type="button" data-copy-reply aria-label="Copy reply">${svgIcon("i-copy")}</button>
+    <button class="foot-action" type="button" data-retry aria-label="Ask again">${svgIcon("i-refresh")}</button>
+    ${m.stats ? `<span class="stats">${svgIcon("i-activity")}${(m.stats.firstMs / 1000).toFixed(2)} s · ${m.stats.tps} tok/s</span>` : ""}`;
+}
+
+function openChat(id) {
+  const chat = loadChat(id);
+  if (!chat) return toast("That chat is no longer saved.");
+  state.run?.cancel();
+  bridge?.newSession();
+  state.chat = chat;
+  resetConversationView();
+  let lastPrompt = "";
+  chat.messages.forEach((m) => {
+    if (m.role === "user") { lastPrompt = m.text; addUserMessage(m.text); } else addSavedAssistant(m, lastPrompt);
+  });
+  els.empty.hidden = chat.messages.length > 0;
+  state.hasRun = chat.messages.length > 0;
+  closeSheet();
+  showView("chat");
+  els.conversation.scrollTop = els.conversation.scrollHeight;
+}
+
+function historyBucket(t) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const day = 864e5;
+  if (t >= start.getTime()) return "Today";
+  if (t >= start.getTime() - day) return "Yesterday";
+  if (t >= start.getTime() - 6 * day) return "Previous 7 days";
+  if (t >= start.getTime() - 29 * day) return "Previous 30 days";
+  return "Older";
+}
+
+let pendingDelete = null;
+function renderHistory() {
+  const q = $("#history-search").value.trim().toLowerCase();
+  const chats = listChats().filter((c) => !q || `${c.title} ${c.preview}`.toLowerCase().includes(q));
+  if (!chats.length) {
+    $("#history-list").innerHTML = `<p class="empty-row">${q ? "No chats match." : "No saved chats yet. Your conversations appear here after the first reply."}</p>`;
+    return;
+  }
+  const groups = new Map();
+  chats.forEach((c) => { const b = historyBucket(c.updatedAt); if (!groups.has(b)) groups.set(b, []); groups.get(b).push(c); });
+  $("#history-list").innerHTML = [...groups].map(([bucket, list]) => `
+    <h3 class="label">${bucket}</h3>
+    <div class="card list">${list.map((c) => `
+      <div class="list-row history-row${state.chat?.id === c.id ? " is-current" : ""}">
+        <button class="history-open" type="button" data-open-chat="${c.id}">
+          <strong>${escapeHtml(c.title)}</strong>
+          <small>${escapeHtml(c.preview || "")}</small>
+        </button>
+        <button class="icon-button small" type="button" data-rename-chat="${c.id}" aria-label="Rename ${escapeHtml(c.title)}">${svgIcon("i-pencil")}</button>
+        ${pendingDelete === c.id
+          ? `<button class="pill-button danger" type="button" data-delete-chat="${c.id}">Delete</button>`
+          : `<button class="icon-button small" type="button" data-ask-delete="${c.id}" aria-label="Delete ${escapeHtml(c.title)}">${svgIcon("i-trash")}</button>`}
+      </div>`).join("")}</div>`).join("");
+}
+
+$("#history-search").addEventListener("input", renderHistory);
+document.addEventListener("click", (event) => {
+  const open = event.target.closest("[data-open-chat]")?.dataset.openChat;
+  const askDelete = event.target.closest("[data-ask-delete]")?.dataset.askDelete;
+  const del = event.target.closest("[data-delete-chat]")?.dataset.deleteChat;
+  const rename = event.target.closest("[data-rename-chat]")?.dataset.renameChat;
+  if (event.target.closest("[data-open='history']")) { pendingDelete = null; $("#history-search").value = ""; renderHistory(); }
+  if (event.target.closest("[data-new-chat]")) startNewChat(true);
+  if (open) openChat(open);
+  if (askDelete) { pendingDelete = askDelete; renderHistory(); setTimeout(() => { if (pendingDelete === askDelete) { pendingDelete = null; if (openSheetId === "history") renderHistory(); } }, 3000); }
+  if (del) { pendingDelete = null; deleteChat(del); }
+  if (rename) startRename(rename);
 });
+
+/* Inline rename (WebView has no prompt() dialog): the title becomes a text field; Enter or leaving saves. */
+function startRename(id) {
+  const row = $(`[data-open-chat="${id}"]`)?.closest(".history-row");
+  if (!row) return;
+  const current = listChats().find((c) => c.id === id)?.title || "";
+  const form = document.createElement("form");
+  form.className = "rename-form";
+  form.innerHTML = `<input type="text" maxlength="80" aria-label="Chat name" /><button class="pill-button" type="submit">Save</button>`;
+  const input = $("input", form);
+  input.value = current;
+  row.replaceChildren(form);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const title = input.value.trim();
+    if (title && title !== current) renameChat(id, title);
+    else renderHistory();
+  };
+  form.addEventListener("submit", (e) => { e.preventDefault(); commit(); });
+  input.addEventListener("keydown", (e) => { if (e.key === "Escape") { done = true; renderHistory(); } });
+  input.addEventListener("blur", () => setTimeout(commit, 150));
+}
+
 
 /* ---------- Start ---------- */
 if (live) {

@@ -67,6 +67,12 @@ Notes: on Android 13+, a sideloaded app may need **App info → ⋮ → Allow re
 
 Why a folder may fail to add: Android's folder picker does not allow the storage root, **Download**, or Android/ ("Can't use this folder"). Pick a subfolder, or use Connections → Internal storage. While a large folder is listed, the progress card shows "Scanning… N files found"; the final message says how many files were added, unchanged, skipped (not text or over 4 MB), or PDFs skipped (before Android 15).
 
+## Chats
+
+The history button (clock) in the header opens **Chats**: every conversation, grouped Today / Yesterday / Previous 7 days / Previous 30 days / Older, with search, rename (pencil), and delete (bin, tap Delete to confirm). Tap one to reopen it exactly as it looked (formatting, citations, tool calls, timings) and keep chatting: each chat has its own SDK chat session, so the model remembers that conversation and only that one. **New chat** (pencil-on-paper icon) starts a fresh conversation and keeps the previous one in the list.
+
+Chats are saved after every reply in app-private storage (`files/chats/`, one JSON file per chat plus an index; `ChatStore.java`). Deleting a chat also deletes its model-facing history. Agent and Workflow turns are shown in a saved chat, but only Chat turns become model history.
+
 ## Replies
 
 Replies render Markdown as they stream: headings, lists (nested and checklists), tables, code blocks with a Copy button, quotes, and bold or italic text. All HTML from the model is escaped. The system prompt (v4) asks for this structure. When an answer used your sources, citation markers like [1] are tappable and open the exact passage the model was given; numbered source chips sit under the reply. Each reply has Copy (plain text) and Ask again.
@@ -111,6 +117,10 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 27 | Connections → Messages → Connect. Ask "What did <name> text me last?" | Answer quotes the latest SMS from that contact, cited |
 | 28 | Connections → App notifications → Allow → enable in settings → back. Receive a WhatsApp message, tap refresh, ask about it | The message is found |
 | 27a | Full build, Messages connected: "What was my last SMS?" (no sync since it arrived) | Answer quotes the newest SMS; Run trace lists `Phone · latest SMS` |
+| 30 | Ask two questions, tap New chat, ask one more | History lists two chats, newest first, titled by their first question |
+| 31 | Open the first chat, ask "what did I ask first?" | The reply refers to that chat's first question, not the other chat |
+| 32 | Kill and relaunch Studio, open Chats | Both chats are still there and reopen with formatting and citations |
+| 33 | Rename a chat, then delete another (tap bin, then Delete) | Title updates; the deleted chat disappears |
 | 29 | Disconnect any connection | Its items disappear; questions about it no longer cite it |
 | 24 | Sources → Strict, ask something only loosely related to a document | Fewer or no "Sources" chips than with Loose |
 | 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |

@@ -34,4 +34,5 @@ dependencies {
     implementation project(':sdk-remote')
 
     testImplementation libs.junit
+    testImplementation libs.orgjson // decision D9: real org.json for JVM tests
 }
