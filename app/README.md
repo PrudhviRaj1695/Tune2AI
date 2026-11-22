@@ -6,9 +6,9 @@ The Android sample and developer console for the Tune2AI SDK. The UI is a web pa
 
 Studio runs GGUF models with llama.cpp.
 
-- **Download in the app (easiest):** Model & settings → **Models for this phone** shows the phone's RAM, chip, and free storage, and rates six models from SmolLM2 135M (145 MB) to Llama 3.2 3B (2.0 GB). The largest one that fits is marked **Best for this phone**; with no model installed, the start screen offers it as a one-tap download. When the download finishes, the model is selected and ready to chat.
+- **Download in the app (easiest):** Model & settings → **Models for this phone** shows the phone's RAM, chip, free RAM, and free storage, and rates models from SmolLM2 135M (145 MB) to Llama 3.1 8B (4.9 GB). The largest model that fits is marked **Best fit**; other models that fit current available RAM are marked **Fits now**. Models beyond the current RAM estimate are marked **Needs more memory** and explain why when tapped.
 
-  A model fits when its loaded size (file + 10% + 256 MB of context) stays within 35% of total RAM and the file leaves 200 MB of storage free. Models above that are marked Too large and cannot be downloaded, so a load cannot push the phone into killing the app. The rules live in `ModelAdvisor.java` and are covered by `ModelAdvisorTest`. Downloads come from Hugging Face over HTTPS, resume after a dropped connection, and keep the screen on while they run; they stop if Studio is closed and resume next time.
+  A model fits when its estimated loaded size (file + 10% + 256 MB of context) stays within both 35% of total RAM and current available RAM, and the file leaves 200 MB of storage free. The rules live in `ModelAdvisor.java` and are covered by `ModelAdvisorTest`. Downloads come from Hugging Face over HTTPS, resume after a dropped connection, and keep the screen on while they run; they stop if Studio is closed and resume next time.
 - **In the app:** tap the model name at the top → **Import a .gguf model**, then pick the file (for example from Downloads).
 - **With adb (debug builds):** files in the app's `files/models/` folder are registered at startup.
 
@@ -116,7 +116,7 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 |---|---|---|
 | 1 | Launch with no models | "Add a model to start." names this phone and the best model for it, with a Download button; no "Preview" badge |
 | 1a | Tap the Download button | Progress bar with MB and %; at 100% the toast says "… is ready" and the header shows the model |
-| 1b | Model & settings → Models for this phone | Phone name, chip, RAM, free memory and storage; one model marked Best for this phone; bigger ones Too large |
+| 1b | Model & settings → Models for this phone | Phone name, chip, RAM, free RAM and storage; Best fit, Fits now, and Needs more memory labels |
 | 1c | Start a download, turn on airplane mode, then off, tap Get again | Fails with a message, then resumes from where it stopped |
 | 2 | Import a .gguf model | Toast "Imported …"; the model appears in Model & settings as Ready and is selected |
 | 3 | Import a non-GGUF file | Toast saying it is not a valid GGUF model; nothing registered |

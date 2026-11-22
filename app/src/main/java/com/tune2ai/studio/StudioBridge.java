@@ -152,6 +152,7 @@ final class StudioBridge {
         ai.getKnowledge().setChunking(com.tune2ai.sdk.services.rag.ChunkingStrategy.of(p.getString("chunking", "auto")));
         ai.getKnowledge().setPreferredEmbeddingModel(p.getString("embedder", null));
         ai.getKnowledge().setIncludeNeighbors(p.getBoolean("neighbors", false));
+        LlamaBackend.setHardware(p.getString("hardware", "auto"));
         String prompt = p.getString("prompt", null);
         if (prompt != null) registerPrompt(prompt, p.getInt("promptVersion", FIRST_CUSTOM_VERSION));
     }
@@ -396,6 +397,10 @@ final class StudioBridge {
                 o.put("memoryBytes", m.getMemoryBytes());
                 o.put("tasks", new JSONArray(m.getTasks().stream().map(Enum::name).collect(java.util.stream.Collectors.toList())));
                 o.put("state", state == null ? "Unloaded" : state.getClass().getSimpleName());
+                String hardware = LlamaBackend.hardwareOf(m.getId());
+                if (hardware != null) o.put("hardware", hardware);
+                String hardwareNote = LlamaBackend.hardwareNoteOf(m.getId());
+                if (hardwareNote != null) o.put("hardwareNote", hardwareNote);
                 if (state instanceof ModelState.Unavailable) o.put("reason", ((ModelState.Unavailable) state).getReason());
                 if (state instanceof ModelState.Failed) o.put("reason", ((ModelState.Failed) state).getReason());
                 out.put(o);
@@ -404,6 +409,59 @@ final class StudioBridge {
             }
         }
         return out.toString();
+    }
+
+    /** NPUs/GPUs this phone offers to llama.cpp, best first, as a JSON array. Empty means CPU only. */
+    @JavascriptInterface
+    public String accelerators() {
+        return new JSONArray(LlamaBackend.availableAccelerators()).toString();
+    }
+
+    /** The hardware choices for this phone and the one selected, as JSON for the Studio settings. */
+    @JavascriptInterface
+    public String hardwareChoices() {
+        String gpu = null;
+        String npu = null;
+        for (String name : LlamaBackend.availableAccelerators()) {
+            if (name.startsWith("NPU") && npu == null) npu = name;
+            else if (name.startsWith("GPU") && gpu == null) gpu = name;
+        }
+        String best = npu != null ? npu : gpu != null ? gpu : "CPU";
+        try {
+            JSONArray options = new JSONArray();
+            options.put(new JSONObject().put("id", "auto").put("label", "Auto").put("available", true)
+                    .put("detail", "Uses the fastest hardware that works: " + best + ". Falls back to CPU if it fails."));
+            options.put(new JSONObject().put("id", "cpu").put("label", "CPU").put("available", true)
+                    .put("detail", "Works on every phone. Slowest, but the most compatible."));
+            options.put(new JSONObject().put("id", "gpu").put("label", "GPU").put("available", gpu != null)
+                    .put("detail", gpu != null ? gpu : "Not available on this phone."));
+            options.put(new JSONObject().put("id", "npu").put("label", "NPU").put("available", npu != null)
+                    .put("detail", npu != null ? npu : "Not available in this build or on this phone."));
+            return new JSONObject().put("selected", LlamaBackend.getHardware()).put("options", options).toString();
+        } catch (JSONException e) {
+            return "{}";
+        }
+    }
+
+    /**
+     * Chooses the hardware for on-device models: auto, cpu, gpu, or npu. Loaded models are unloaded so the next
+     * message loads them on the new hardware. Returns "" on success or an error.
+     */
+    @JavascriptInterface
+    public String setHardware(String id) {
+        if (!java.util.Arrays.asList("auto", "cpu", "gpu", "npu").contains(id)) return "Unknown hardware choice.";
+        settingsPrefs().edit().putString("hardware", id).apply();
+        LlamaBackend.setHardware(id);
+        if (!"cpu".equals(id)) LlamaBackend.forgetGpuCrashes(); // an explicit choice means "try it again"
+        new Thread(() -> {
+            for (ModelInfo info : ai.getModels().listBlocking()) {
+                if (info.getState() instanceof ModelState.Loaded && !RemoteBackend.FORMAT.equals(info.getDescriptor().getFormat())) {
+                    ai.getModels().unloadBlocking(info.getDescriptor().getId());
+                }
+            }
+            modelsChanged();
+        }, "hardware-switch").start();
+        return "";
     }
 
     @JavascriptInterface
@@ -424,7 +482,7 @@ final class StudioBridge {
 
     /**
      * This phone's specs and every catalog model rated for it: which is best, which fit, and why
-     * the rest do not. Read on each call, so free memory and storage are current.
+     * the rest do not. Read on each call, so free RAM and storage are current.
      */
     @JavascriptInterface
     public String deviceInfo() {
@@ -451,7 +509,7 @@ final class StudioBridge {
             d.put("supported", supported);
             o.put("device", d);
             JSONArray models = new JSONArray();
-            for (ModelAdvisor.Assessment a : ModelAdvisor.assess(mem.totalMem, freeStorage, supported)) {
+            for (ModelAdvisor.Assessment a : ModelAdvisor.assess(mem.totalMem, mem.availMem, freeStorage, supported)) {
                 JSONObject m = new JSONObject();
                 m.put("id", a.entry.id);
                 m.put("name", a.entry.name);
@@ -480,6 +538,25 @@ final class StudioBridge {
         ModelAdvisor.Entry entry = ModelAdvisor.find(id);
         if (entry == null) {
             notice("Unknown model.");
+            return;
+        }
+        ActivityManager am = (ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mem = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mem);
+        long freeStorage = activity.getFilesDir().getUsableSpace();
+        boolean supported = Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a")
+                || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64");
+        ModelAdvisor.Assessment assessment = null;
+        for (ModelAdvisor.Assessment candidate : ModelAdvisor.assess(
+                mem.totalMem, mem.availMem, freeStorage, supported)) {
+            if (candidate.entry.id.equals(entry.id)) {
+                assessment = candidate;
+                break;
+            }
+        }
+        if (assessment == null || (assessment.fit != ModelAdvisor.Fit.BEST
+                && assessment.fit != ModelAdvisor.Fit.FITS)) {
+            notice(assessment == null ? "This model cannot be downloaded." : assessment.reason);
             return;
         }
         if (downloadingId != null) {

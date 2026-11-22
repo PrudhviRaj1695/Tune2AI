@@ -9,11 +9,12 @@ import java.util.List;
  * The downloadable models Studio offers, and which of them fit a given phone. Plain Java with no
  * Android types, so the fit rules run in JVM tests.
  *
- * <p>A model fits when its estimated loaded size stays within {@link #RAM_BUDGET} of the phone's
- * total memory and the file fits in free storage. Android starts killing apps well before memory
- * is full, so the budget leaves room for the OS, the WebView, and other apps.
- * ponytail: total-RAM share is a heuristic; replace with measured per-device limits if real
- * devices still get killed.
+ * <p>A model fits when its estimated loaded size stays within both {@link #RAM_BUDGET} of the
+ * phone's total memory and the memory currently available to apps. The file must also fit in free
+ * storage. Android starts killing apps well before memory is full, so the budget leaves room for
+ * the OS, the WebView, and other apps.
+ * ponytail: the available-memory snapshot is a conservative heuristic; replace it with measured
+ * per-device limits if real devices still get killed.
  */
 final class ModelAdvisor {
     /** Share of total RAM one loaded model may use. 8 GB phone: 3B fits; 6 GB: 1.5B; 4 GB: 1B. */
@@ -56,12 +57,21 @@ final class ModelAdvisor {
                     "SmolLM2-360M-Instruct-Q4_K_M.gguf", 270_590_880L, "Small and quick on older phones."),
             new Entry("Qwen2.5 0.5B", "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
                     "qwen2.5-0.5b-instruct-q4_k_m.gguf", 491_400_032L, "Smallest model that handles Agent tools."),
+            // Q4_0 builds run on the GPU (OpenCL) on Adreno phones; Q4_K_M runs on the CPU there (D11).
+            new Entry("Llama 3.2 1B GPU", "bartowski/Llama-3.2-1B-Instruct-GGUF",
+                    "Llama-3.2-1B-Instruct-Q4_0.gguf", 773_025_920L, "Runs on the GPU on Snapdragon phones. Fast."),
             new Entry("Llama 3.2 1B", "bartowski/Llama-3.2-1B-Instruct-GGUF",
                     "Llama-3.2-1B-Instruct-Q4_K_M.gguf", 807_694_464L, "Balanced quality and speed."),
             new Entry("Qwen2.5 1.5B", "Qwen/Qwen2.5-1.5B-Instruct-GGUF",
                     "qwen2.5-1.5b-instruct-q4_k_m.gguf", 1_117_320_736L, "Better answers and tool use."),
+            new Entry("Llama 3.2 3B GPU", "bartowski/Llama-3.2-3B-Instruct-GGUF",
+                    "Llama-3.2-3B-Instruct-Q4_0.gguf", 1_921_909_280L, "Runs on the GPU on Snapdragon phones. Strong quality."),
             new Entry("Llama 3.2 3B", "bartowski/Llama-3.2-3B-Instruct-GGUF",
-                    "Llama-3.2-3B-Instruct-Q4_K_M.gguf", 2_019_377_696L, "Best quality here. Needs a high-end phone.")));
+                    "Llama-3.2-3B-Instruct-Q4_K_M.gguf", 2_019_377_696L, "Strong quality for general chat and tool use."),
+            new Entry("Qwen2.5 7B", "Qwen/Qwen2.5-7B-Instruct-GGUF",
+                    "qwen2.5-7b-instruct-q4_k_m.gguf", 4_680_750_080L, "Larger model for testing quality and memory limits."),
+            new Entry("Llama 3.1 8B", "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF",
+                    "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", 4_920_000_000L, "Large model for high-memory phones and stress testing.")));
 
     /**
      * Offline embedding models for the Sources tab's search by meaning, smallest first. All run on
@@ -109,11 +119,13 @@ final class ModelAdvisor {
      * Rates every catalog entry for a phone. The largest entry that fits is {@link Fit#BEST}.
      *
      * @param totalRamBytes total memory the OS reports (ActivityManager.MemoryInfo.totalMem)
+     * @param availableRamBytes memory currently available to apps (ActivityManager.MemoryInfo.availMem)
      * @param freeStorageBytes free space where models are stored
      * @param supportedAbi whether the phone runs one of the ABIs llama.cpp is built for
      */
-    static List<Assessment> assess(long totalRamBytes, long freeStorageBytes, boolean supportedAbi) {
-        long budget = (long) (totalRamBytes * RAM_BUDGET);
+    static List<Assessment> assess(long totalRamBytes, long availableRamBytes, long freeStorageBytes,
+            boolean supportedAbi) {
+        long budget = Math.min((long) (totalRamBytes * RAM_BUDGET), availableRamBytes);
         List<Assessment> out = new ArrayList<>();
         int best = -1;
         for (Entry e : CATALOG) {
@@ -124,13 +136,14 @@ final class ModelAdvisor {
                 reason = "This phone's processor type is not supported (needs 64-bit ARM or x86).";
             } else if (e.memoryBytes() > budget) {
                 fit = Fit.TOO_LARGE;
-                reason = "Needs about " + gb(e.memoryBytes()) + " of memory; this phone can safely give " + gb(budget) + ".";
+                reason = "Needs about " + gb(e.memoryBytes()) + " RAM; " + gb(availableRamBytes)
+                        + " RAM available.";
             } else if (e.sizeBytes + STORAGE_RESERVE > freeStorageBytes) {
                 fit = Fit.NO_STORAGE;
                 reason = "Needs " + gb(e.sizeBytes + STORAGE_RESERVE) + " of free storage; " + gb(freeStorageBytes) + " is free.";
             } else {
                 fit = Fit.FITS;
-                reason = "Uses about " + gb(e.memoryBytes()) + " of memory.";
+                reason = "Uses about " + gb(e.memoryBytes()) + " of RAM.";
                 best = out.size();
             }
             out.add(new Assessment(e, fit, reason));
@@ -140,6 +153,11 @@ final class ModelAdvisor {
             out.set(best, new Assessment(a.entry, Fit.BEST, "Largest model that runs safely on this phone. " + a.reason));
         }
         return out;
+    }
+
+    /** Compatibility helper for JVM callers that only have the total-memory estimate. */
+    static List<Assessment> assess(long totalRamBytes, long freeStorageBytes, boolean supportedAbi) {
+        return assess(totalRamBytes, (long) (totalRamBytes * RAM_BUDGET), freeStorageBytes, supportedAbi);
     }
 
     static Entry find(String id) {

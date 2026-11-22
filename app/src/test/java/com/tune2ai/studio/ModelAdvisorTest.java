@@ -36,10 +36,18 @@ public class ModelAdvisorTest {
     }
 
     @Test
-    public void lowStorageBlocksDownloadsThatWouldFillThePhone() {
-        List<ModelAdvisor.Assessment> all = ModelAdvisor.assess(12 * GB, GB, true);
+    public void currentAvailableMemoryCanBlockAModelThatFitsTheDeviceBudget() {
+        List<ModelAdvisor.Assessment> all = ModelAdvisor.assess(12 * GB, GB, PLENTY, true);
         assertEquals("Qwen2.5 0.5B", bestOf(all));
-        assertEquals(ModelAdvisor.Fit.NO_STORAGE, all.get(3).fit);
+        assertEquals(ModelAdvisor.Fit.TOO_LARGE, all.get(3).fit);
+    }
+
+    @Test
+    public void lowStorageBlocksDownloadsThatWouldFillThePhone() {
+        List<ModelAdvisor.Assessment> all = ModelAdvisor.assess(12 * GB, 12 * GB, GB, true);
+        // The 773 MB Q4_0 build still leaves the 200 MB reserve; the 808 MB Q4_K_M build does not.
+        assertEquals("Llama 3.2 1B GPU", bestOf(all));
+        assertEquals(ModelAdvisor.Fit.NO_STORAGE, named(all, "Llama 3.2 1B").fit);
     }
 
     @Test
@@ -90,5 +98,10 @@ public class ModelAdvisorTest {
             }
         }
         return best;
+    }
+
+    private static ModelAdvisor.Assessment named(List<ModelAdvisor.Assessment> all, String name) {
+        for (ModelAdvisor.Assessment a : all) if (a.entry.name.equals(name)) return a;
+        throw new AssertionError("no catalog entry " + name);
     }
 }

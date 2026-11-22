@@ -93,7 +93,10 @@ function openSheet(id) {
   title.tabIndex = -1;
   title.focus({ preventScroll: true });
   if (id === "trace") $("#trace-dot").hidden = true;
-  if (id === "setup" && device) loadDevice(); // fresh free memory and storage
+  if (id === "setup" && device) {
+    if (live) loadLiveModels();
+    else loadDevice();
+  } // fresh free RAM and storage
 }
 
 function closeSheet(popHistory = true) {
@@ -121,13 +124,21 @@ function renderModels() {
     ? `<p class="hint">No models yet. Import a GGUF file, for example SmolLM2 or Qwen2.5 Instruct.</p>` : "";
   const importButton = live ? `<div class="button-row"><button class="button" type="button" data-import>${svgIcon("i-plus")}Import a .gguf model</button></div>` : "";
   $("#model-list").innerHTML = empty + Object.entries(MODELS).map(([key, m]) => `
-    <label class="model-option">
+    <label class="model-option${m.unavailable ? " is-unavailable" : ""}" ${m.unavailable ? `data-unavailable-model="${key}"` : ""}>
       <input type="radio" name="model" value="${key}" ${key === state.model ? "checked" : ""} ${m.unavailable ? "disabled" : ""} />
       <span class="mono-tile" aria-hidden="true">${m.mono}</span>
-      <span class="model-text"><strong>${m.name}</strong><small>${m.backend} · ${m.size}${m.unavailable ? ` · ${m.unavailable}` : ""}</small></span>
-      <span class="model-state" data-state="${(m.state || "").toLowerCase()}">${m.unavailable ? "Unavailable" : m.state}</span>
+      <span class="model-text"><strong>${escapeHtml(m.name)}</strong><small>${escapeHtml(`${m.backend} · ${m.size}${m.hardware ? ` · ${m.hardware}` : ""}${m.unavailable ? ` · ${m.unavailable}` : ""}`)}</small></span>
+      <button class="model-state" type="button" ${m.unavailable ? `data-unavailable-model="${key}"` : "tabindex=-1"} data-state="${m.unavailable ? "unavailable" : (m.state || "").toLowerCase()}">${m.unavailable ? "Unavailable" : m.state}</button>
       <span class="radio-mark" aria-hidden="true">${svgIcon("i-check")}</span>
     </label>`).join("") + importButton;
+}
+
+function showModelUnavailable(name, reason) {
+  $("#model-unavailable-title").textContent = `${name} is unavailable right now`;
+  $("#model-unavailable-copy").textContent = reason;
+  const dialog = $("#model-unavailable-dialog");
+  if (dialog.open) dialog.close();
+  dialog.showModal();
 }
 
 document.addEventListener("click", (event) => {
@@ -169,7 +180,7 @@ function renderCatalog() {
     <small>${escapeHtml([d.chip, `${d.cores} cores`, `Android ${d.android}`].filter(Boolean).join(" · "))}</small>
     <div class="spec-row">
       <span><b>${gb(d.totalRamBytes)}</b>RAM</span>
-      <span><b>${gb(d.availableRamBytes)}</b>Free memory</span>
+      <span><b>${gb(d.availableRamBytes)}</b>Free RAM</span>
       <span><b>${gb(d.freeStorageBytes)}</b>Free storage</span>
     </div>`;
   const busy = Object.keys(downloads).length > 0;
@@ -181,13 +192,19 @@ function renderCatalog() {
     if (m.installed) action = `<span class="model-state" data-state="loaded">Installed</span>`;
     else if (dl) action = `<button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button>`;
     else if (ok) action = `<button class="pill-button" type="button" data-download="${m.id}" ${busy ? "disabled" : ""}>${svgIcon("i-download")}Get</button>`;
-    else action = `<span class="model-state">${m.fit === "no-storage" ? "No space" : m.fit === "unsupported" ? "Unsupported" : "Too large"}</span>`;
+    else action = `<button class="model-state unavailable-model" type="button" data-catalog-unavailable="${m.id}">${m.fit === "no-storage" ? "No space" : m.fit === "unsupported" ? "Unsupported" : "Too large"}</button>`;
     const pct = dl ? Math.floor((dl.received / dl.total) * 100) : 0;
+    const badge = m.fit === "best" ? '<span class="best-badge">Best fit</span>'
+      : m.fit === "fits" ? '<span class="fit-badge">Fits now</span>' : "";
     return `
       <div class="catalog-row" data-fit="${m.fit}">
         <div class="model-text">
-          <strong>${escapeHtml(m.name)}${m.fit === "best" ? '<span class="best-badge">Best for this phone</span>' : ""}</strong>
-          <small>${escapeHtml(dl ? `${gb(dl.received)} of ${gb(dl.total)} · ${pct}%` : `${gb(m.sizeBytes)} · ${ok ? m.blurb : m.reason}`)}</small>
+          <strong>${escapeHtml(m.name)}${badge}</strong>
+          <small>${escapeHtml(dl ? `${gb(dl.received)} of ${gb(dl.total)} · ${pct}%`
+            : m.fit === "too-large" ? `${gb(m.sizeBytes)} · Needs more memory · ${m.reason}`
+            : m.fit === "no-storage" ? `${gb(m.sizeBytes)} · Not enough storage · ${m.reason}`
+            : m.fit === "unsupported" ? `${gb(m.sizeBytes)} · Unsupported device · ${m.reason}`
+            : `${gb(m.sizeBytes)} · ${m.blurb}`)}</small>
           ${dl ? `<div class="meter"><span style="width:${pct}%"></span></div>` : ""}
         </div>
         ${action}
@@ -249,6 +266,11 @@ function onDownload(e) {
 document.addEventListener("click", (event) => {
   const get = event.target.closest("[data-download]");
   if (get) startDownload(get.dataset.download);
+  const unavailable = event.target.closest("[data-catalog-unavailable]");
+  if (unavailable) {
+    const model = device?.models.find((m) => m.id === unavailable.dataset.catalogUnavailable);
+    if (model) showModelUnavailable(model.name, model.reason);
+  }
   if (event.target.closest("[data-cancel-download]")) {
     if (live) bridge.cancelDownload();
     else Object.keys(downloads).forEach((id) => onDownload({ id, state: "cancelled" }));
@@ -695,20 +717,28 @@ $("#search-form").addEventListener("submit", (event) => {
 function loadLiveModels() {
   const all = JSON.parse(bridge.listModels());
   state.remoteModel = all.find((m) => m.format === "remote") || null;
+  loadDevice(); // get a fresh available-RAM snapshot before enabling installed models
+  const fitsNow = new Map(device?.models.map((m) => [m.id, m]) || []);
   const list = all.filter((m) => m.format !== "remote" && (m.tasks || ["CHAT"]).includes("CHAT"));
-  MODELS = Object.fromEntries(list.map((m) => [m.id, {
-    name: m.name,
-    short: m.name.length > 18 ? `${m.name.slice(0, 17)}…` : m.name,
-    backend: "llama.cpp",
-    mono: "GG",
-    size: formatBytes(m.sizeBytes),
-    state: m.state === "Unloaded" ? "Ready" : m.state,
-    unavailable: m.state === "Unavailable" || m.state === "Failed" ? m.reason : null,
-    tps: 0,
-  }]));
+  MODELS = Object.fromEntries(list.map((m) => {
+    const assessment = fitsNow.get(m.id);
+    const stateUnavailable = m.state === "Unavailable" || m.state === "Failed" ? m.reason : null;
+    const memoryUnavailable = assessment && !["best", "fits"].includes(assessment.fit) ? assessment.reason : null;
+    return [m.id, {
+      name: m.name,
+      short: m.name.length > 18 ? `${m.name.slice(0, 17)}…` : m.name,
+      backend: "llama.cpp",
+      mono: "GG",
+      size: formatBytes(m.sizeBytes),
+      state: m.state === "Unloaded" ? "Ready" : m.state,
+      hardwareNote: m.hardwareNote || null,
+      hardware: m.hardware || null, // set once the model is loaded: "CPU", "GPU (…)" or "NPU (…)"
+      unavailable: stateUnavailable || memoryUnavailable,
+      tps: 0,
+    }];
+  }));
   const usable = Object.keys(MODELS).filter((k) => !MODELS[k].unavailable);
   if (!usable.includes(state.model)) state.model = usable[0] || null;
-  loadDevice(); // installed flags and the recommendation feed the empty state below
   renderModels();
   renderRuntime();
   renderMode();
@@ -754,6 +784,34 @@ function describeSource(source) {
   return `${kind[0].toUpperCase()}${kind.slice(1)} · ${value}`;
 }
 
+/** Short hardware name for the runtime label: "GPU", "NPU", "CPU", or "Private" before a model has loaded. */
+function hardwareLabel(model) {
+  return model.hardware ? model.hardware.split(" ")[0] : "Private";
+}
+
+function hardwareHint(model) {
+  if (model.hardware) return `Running on ${model.hardware}.`;
+  const accel = JSON.parse(bridge.accelerators());
+  return accel.length ? `Will use ${accel[0]} when the model loads, CPU if that fails.` : "This phone offers no GPU or NPU for models, so it uses the CPU.";
+}
+
+/** Hardware picker (Auto / CPU / GPU / NPU) and what the model is running on right now. */
+function renderHardware(model, remote) {
+  const group = $("#hardware-group");
+  group.hidden = !live || remote;
+  if (group.hidden) return;
+  const choices = JSON.parse(bridge.hardwareChoices());
+  $("#hardware-options").innerHTML = choices.options.map((o) => `
+    <label><input type="radio" name="hardware" value="${o.id}" ${o.id === choices.selected ? "checked" : ""} ${o.available ? "" : "disabled"} /><span>${escapeHtml(o.label)}</span></label>`).join("");
+  const picked = choices.options.find((o) => o.id === choices.selected);
+  $("#hardware-detail").textContent = picked ? picked.detail : "";
+  const now = $("#hardware-now");
+  now.dataset.hardware = (model.hardware || "").split(" ")[0].toLowerCase();
+  now.textContent = model.hardware
+    ? `In use now: ${model.hardware}.${model.hardwareNote ? ` ${model.hardwareNote}.` : ""}`
+    : "Not loaded yet. The hardware in use shows here after the next message.";
+}
+
 function renderRuntime() {
   const model = currentModel();
   const remote = state.execution === "remote";
@@ -761,11 +819,12 @@ function renderRuntime() {
   $("#model-chip-label").textContent = model.short;
   chip.toggleAttribute("data-remote", remote);
   chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change model and settings`);
-  $("#runtime-label").textContent = remote ? "Remote · HTTPS" : "On-device · Private";
+  $("#runtime-label").textContent = remote ? "Remote · HTTPS" : `On-device · ${hardwareLabel(model)}`;
   $("#execution-hint").textContent = remote
     ? live ? remoteHint() : "Sent to the Remote API backend over HTTPS. Same route, same events."
-    : "Runs on this phone. Nothing leaves the device.";
+    : `Runs on this phone. Nothing leaves the device.${live ? ` ${hardwareHint(model)}` : ""}`;
   $("#remote-form").hidden = !(live && remote);
+  renderHardware(model, remote);
   $("#catalog-group").hidden = remote;
   if (live) {
     const r = JSON.parse(bridge.resources());
@@ -787,6 +846,17 @@ $$('input[name="execution"]').forEach((input) => input.addEventListener("change"
   state.execution = input.value;
   renderRuntime();
 }));
+$("#model-list").addEventListener("click", (event) => {
+  const unavailable = event.target.closest("[data-unavailable-model]");
+  if (!unavailable) return;
+  const model = MODELS[unavailable.dataset.unavailableModel];
+  if (model?.unavailable) showModelUnavailable(model.name, model.unavailable);
+});
+$("#hardware-options").addEventListener("change", (event) => {
+  const err = bridge.setHardware(event.target.value);
+  if (err) toast(err);
+  renderRuntime(); // the unload finishes in the background and onModelsChanged refreshes again
+});
 $("#model-list").addEventListener("change", (event) => {
   state.model = event.target.value;
   renderRuntime();
@@ -855,7 +925,7 @@ function routeSteps() {
     { name: "Request Controller", detail: `Validated · deadline ${live ? 120 : 30} s` },
     { name: "Model & Task Router", detail: remote ? `Remote API · ${model.short}` : `${model.backend} · ${model.short}` },
     { name: "Context Manager", detail: context },
-    { name: "Inference", detail: remote ? "Remote API · SSE stream" : `${model.backend} · streaming` },
+    { name: "Inference", detail: remote ? "Remote API · SSE stream" : `${model.backend}${model.hardware ? ` on ${model.hardware}` : ""} · streaming` },
   ];
 }
 

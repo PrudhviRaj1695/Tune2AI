@@ -15,7 +15,14 @@ android {
         externalNativeBuild {
             cmake {
                 // Inference is unusably slow unoptimized, so native code is always built as Release.
-                arguments '-DCMAKE_BUILD_TYPE=Release'
+                arguments '-DCMAKE_BUILD_TYPE=Release',
+                        // Several .so files (llama, ggml, one per backend) must share one C++ runtime.
+                        '-DANDROID_STL=c++_shared',
+                        "-DTUNE2AI_OPENCL=${(findProperty('TUNE2AI_OPENCL') ?: 'true').toString().toUpperCase()}",
+                        // GPU (Vulkan) is on by default; -PTUNE2AI_VULKAN=false builds CPU-only.
+                        "-DTUNE2AI_VULKAN=${(findProperty('TUNE2AI_VULKAN') ?: 'true').toString().toUpperCase()}",
+                        // NPU (Qualcomm Hexagon) is opt-in: -PTUNE2AI_HEXAGON_SDK=/path/to/Hexagon_SDK
+                        *(findProperty('TUNE2AI_HEXAGON_SDK') ? ["-DTUNE2AI_HEXAGON_SDK=${findProperty('TUNE2AI_HEXAGON_SDK')}"] : [])
             }
         }
     }
@@ -23,6 +30,13 @@ android {
     externalNativeBuild {
         cmake {
             path 'src/main/cpp/CMakeLists.txt'
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // Link-time stand-in only; the phone's own libOpenCL.so must be the one that loads.
+            excludes += '**/libOpenCL.so'
         }
     }
 
