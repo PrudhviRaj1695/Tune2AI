@@ -236,6 +236,26 @@ class RagTest {
     }
 
     @Test
+    fun wordEndingsMatch() {
+        val stem = RagEngine.Companion::stem
+        assertEquals(stem("message"), stem("messages"))
+        assertEquals(stem("message"), stem("messaged"))
+        assertEquals(stem("call"), stem("called"))
+        assertEquals(stem("call"), stem("calling"))
+        assertEquals(stem("text"), stem("texted"))
+        assertEquals(stem("reply"), stem("replies"))
+        assertEquals("bus", stem("bus"))
+        assertEquals("1984", stem("1984"))
+    }
+
+    @Test
+    fun pluralQuestionsFindSingularText() = runTest {
+        val rag = engine(withEmbedder = false)
+        rag.add("sms", "SMS with HDFC Bank", "# SMS text message with HDFC Bank\n\nYour account was debited 2,500 on Friday.")
+        assertEquals("sms", rag.retrieve("messages from the bank").firstOrNull()?.sourceId)
+    }
+
+    @Test
     fun retrievalFailureLeavesTheRequestWithoutKnowledge() = runTest {
         val broken = object : com.tune2ai.sdk.core.Storage by InMemoryStorage() {
             override suspend fun list(namespace: String): Map<String, String> = throw com.tune2ai.sdk.api.Tune2AIException.StorageFailure("disk gone")

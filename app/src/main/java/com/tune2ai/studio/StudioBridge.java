@@ -75,7 +75,7 @@ final class StudioBridge {
     private final Connections connections;
     private volatile String pendingConnect; // connection waiting for a permission answer or a settings visit
 
-    StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote) {
+    StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote, PhoneContextSource phone) {
         this.activity = activity;
         this.webView = webView;
         this.ai = ai;
@@ -83,6 +83,7 @@ final class StudioBridge {
         this.modelsDir = new File(activity.getFilesDir(), "models");
         this.connector = new KnowledgeConnector(activity, ai.getKnowledge());
         this.connections = new Connections(activity, ai.getKnowledge(), connector);
+        phone.attach(connections);
         indexer.execute(this::syncDueConnections);
         android.content.SharedPreferences prefs = activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE);
         ai.getKnowledge().setEnabled(prefs.getBoolean("enabled", true));

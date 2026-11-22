@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
 
     private WebView webView;
     private Tune2AI ai;
+    private final PhoneContextSource phone = new PhoneContextSource();
     private StudioBridge bridge;
     private final RemoteSettings remote = new RemoteSettings();
 
@@ -49,6 +50,8 @@ public final class MainActivity extends Activity {
                 // "today" or "next Friday" over calendar and message sources make sense.
                 .addPromptTemplate(new PromptTemplate("helpful-assistant", 5, SYSTEM_PROMPT, Collections.singleton("today")))
                 .defaultPromptTemplate("helpful-assistant")
+                // Live messages, calls, calendar, and notifications for questions about them.
+                .addContextSource(phone)
                 // Demo tools for Agent mode. Handlers run on a background thread.
                 .addTool(new Tool("device_status",
                         "Reports this device's free memory, battery level, and thermal state.",
@@ -82,7 +85,7 @@ public final class MainActivity extends Activity {
             WebView.setWebContentsDebuggingEnabled(true); // chrome://inspect in debug builds only
         }
 
-        bridge = new StudioBridge(this, webView, ai, remote);
+        bridge = new StudioBridge(this, webView, ai, remote, phone);
         webView.addJavascriptInterface(bridge, "Tune2AIBridge");
 
         // Edge-to-edge is enforced from targetSdk 35: pad for system bars and the keyboard.

@@ -52,6 +52,8 @@ The **Connections** tab lets the model use data already on the phone. Each conne
 
 Google Drive is reachable through Sources → Files or Folder (choose Drive in the picker); Gmail through App notifications or Share. Gmail and Drive APIs themselves would need a Google Cloud OAuth client, which Studio does not have.
 
+**Live data.** Questions about messages, calls, the calendar, or notifications ("what was my last SMS?", "who called me?", "what's on today?") also get the newest items read from the phone at that moment (`PhoneContextSource`, registered with `Tune2AI.Builder.addContextSource`), because search cannot find "the latest" and new items arrive between syncs. Only connections that are on are read. Run trace shows them as `Phone · latest SMS` and so on.
+
 The system prompt (v5) includes today's date and time, so "what's on Friday?" or "what did Mom text yesterday?" resolve against the indexed dates.
 
 **Two builds.** Play Protect blocks apps installed outside the Play Store (from a browser or file manager) when they request SMS or notification access ("App blocked to protect your device"), so Studio has two flavors:
@@ -108,6 +110,7 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 26 | Connections → Calendar → Connect → allow. Ask "What's on my calendar this week?" | Answer lists this week's events with [n] citations to "Calendar — <month>" |
 | 27 | Connections → Messages → Connect. Ask "What did <name> text me last?" | Answer quotes the latest SMS from that contact, cited |
 | 28 | Connections → App notifications → Allow → enable in settings → back. Receive a WhatsApp message, tap refresh, ask about it | The message is found |
+| 27a | Full build, Messages connected: "What was my last SMS?" (no sync since it arrived) | Answer quotes the newest SMS; Run trace lists `Phone · latest SMS` |
 | 29 | Disconnect any connection | Its items disappear; questions about it no longer cite it |
 | 24 | Sources → Strict, ask something only loosely related to a document | Fewer or no "Sources" chips than with Loose |
 | 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |

@@ -8,6 +8,8 @@ import com.tune2ai.sdk.api.Tune2AIException.InvalidRequest
 import com.tune2ai.sdk.core.AssembledContext
 import com.tune2ai.sdk.core.ContextAssembler
 import com.tune2ai.sdk.services.prompt.PromptManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** A piece of retrieved knowledge or memory, with a reference reported in the request trace. */
 data class ContextItem(val ref: String, val text: String)
@@ -19,6 +21,23 @@ interface ContextSource {
 
     /** How this source's items appear in the system prompt. */
     fun render(items: List<ContextItem>): String = "Relevant information:\n" + items.joinToString("\n") { "- ${it.text}" }
+}
+
+/**
+ * A [ContextSource] for Java callers: implement [fetchBlocking], which runs on a background thread.
+ * A failure leaves the request without this source's items instead of failing it.
+ */
+abstract class BlockingContextSource : ContextSource {
+    abstract fun fetchBlocking(query: String, model: ModelDescriptor): List<ContextItem>
+
+    override suspend fun fetch(query: String, model: ModelDescriptor): List<ContextItem> =
+        withContext(Dispatchers.IO) {
+            try {
+                fetchBlocking(query, model)
+            } catch (e: Exception) {
+                emptyList()
+            }
+        }
 }
 
 /**

@@ -19,6 +19,7 @@ import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
+import com.tune2ai.sdk.services.context.ContextSource
 import com.tune2ai.sdk.services.embedding.EmbeddingService
 import com.tune2ai.sdk.services.model.ModelManager
 import com.tune2ai.sdk.services.prompt.PromptManager
@@ -48,6 +49,7 @@ class Tune2AI private constructor(
     prompts: PromptManager,
     defaultTemplate: String?,
     tools: List<Tool>,
+    contextSources: List<ContextSource>,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
@@ -61,7 +63,11 @@ class Tune2AI private constructor(
     private val controller = RequestController(
         manager,
         router,
-        ContextManager(prompts, defaultTemplate, sources = listOf(RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.enabled }))),
+        ContextManager(
+            prompts,
+            defaultTemplate,
+            sources = contextSources + RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.enabled }),
+        ),
     )
 
     val chat = ChatApi(controller, platform.storage, scope, ready)
@@ -91,6 +97,7 @@ class Tune2AI private constructor(
         private var limits = ResourceLimits()
         private var defaultTemplate: String? = null
         private val tools = mutableListOf<Tool>()
+        private val contextSources = mutableListOf<ContextSource>()
 
         /** Registers a backend; fails fast on a duplicate id or missing capabilities. */
         fun addBackend(backend: InferenceBackend) = apply { backends.register(backend) }
@@ -99,6 +106,17 @@ class Tune2AI private constructor(
 
         /** Offers a host-provided tool to agents (decision D6). Validated when [build] runs. */
         fun addTool(tool: Tool) = apply { tools += tool }
+
+        /**
+         * Adds app-provided context (for example live data the app reads at request time). Its items
+         * reach the model through the Context Manager, before retrieved knowledge. Names must be unique.
+         */
+        fun addContextSource(source: ContextSource) = apply {
+            if (source.name == "rag" || contextSources.any { it.name == source.name }) {
+                throw Tune2AIException.InvalidRequest("A context source named '${source.name}' is already registered")
+            }
+            contextSources += source
+        }
 
         fun addPromptTemplate(template: PromptTemplate) = apply { prompts.register(template) }
 
@@ -109,7 +127,7 @@ class Tune2AI private constructor(
             if (backends.all.isEmpty()) throw Tune2AIException.InvalidRequest("Add at least one inference backend with addBackend(...)")
             defaultTemplate?.let { prompts.get(it) } // fails now if the default template was never registered
             ToolCallingEngine(tools) // fails now on invalid names or schemas
-            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList())
+            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList(), contextSources.toList())
         }
 
         internal companion object {

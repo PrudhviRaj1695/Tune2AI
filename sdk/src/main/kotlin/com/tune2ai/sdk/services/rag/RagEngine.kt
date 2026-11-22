@@ -242,7 +242,25 @@ class RagEngine(
         )
 
         internal fun terms(text: String): List<String> =
-            Regex("[\\p{L}\\p{N}]+").findAll(text.lowercase()).map { it.value }.filter { it.length > 1 && it !in STOP_WORDS }.toList()
+            Regex("[\\p{L}\\p{N}]+").findAll(text.lowercase()).map { it.value }.filter { it.length > 1 && it !in STOP_WORDS }.map(::stem).toList()
+
+        /**
+         * Light English suffix folding so "messages" finds "message" and "called" finds "call".
+         * ponytail: a few rules, not a full stemmer (Porter/Snowball); swap one in if recall needs it.
+         */
+        internal fun stem(word: String): String {
+            if (word.length <= 3 || word.any { it.isDigit() }) return word
+            val w = when {
+                word.endsWith("ies") && word.length > 4 -> word.dropLast(3) + "y"
+                word.endsWith("sses") || word.endsWith("ches") || word.endsWith("shes") || word.endsWith("xes") -> word.dropLast(2)
+                word.endsWith("ing") && word.length > 5 -> word.dropLast(3)
+                word.endsWith("ed") && word.length > 4 -> word.dropLast(2)
+                word.endsWith("s") && !word.endsWith("ss") && !word.endsWith("us") -> word.dropLast(1)
+                else -> word
+            }
+            // Fold a final "e" so message / messages / messaged meet at "messag".
+            return if (w.length > 4 && w.endsWith("e")) w.dropLast(1) else w
+        }
 
         /** Joins consecutive chunks, dropping the overlap the [Chunker] repeated between them. */
         internal fun mergeTexts(texts: List<String>): String = texts.reduce { acc, next ->

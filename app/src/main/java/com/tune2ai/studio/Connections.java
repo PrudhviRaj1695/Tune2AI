@@ -260,6 +260,84 @@ final class Connections {
         }
     }
 
+    /** On, permitted, and part of this build. */
+    boolean usable(String id) {
+        Spec spec = spec(id);
+        return spec != null && available(spec) && enabled(id) && granted(spec);
+    }
+
+    // ---------- Live reads for PhoneContextSource: the newest items, read at question time ----------
+
+    /** Newest SMS across all conversations, newest first. */
+    List<String> recentSms(int limit, String mentioning) {
+        String[] cols = {Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE};
+        List<String> out = new ArrayList<>();
+        Map<String, String> names = new HashMap<>();
+        try (Cursor c = context.getContentResolver().query(Telephony.Sms.CONTENT_URI, cols, null, null, Telephony.Sms.DATE + " DESC")) {
+            while (c != null && c.moveToNext() && out.size() < limit) {
+                String address = nullToEmpty(c.getString(0));
+                String who = names.computeIfAbsent(address, this::contactName);
+                String body = nullToEmpty(c.getString(1)).replace('\n', ' ').trim();
+                if (mentioning != null && !(who + " " + body).toLowerCase(Locale.ROOT).contains(mentioning)) continue;
+                boolean sent = c.getInt(3) == Telephony.Sms.MESSAGE_TYPE_SENT;
+                out.add("- " + fmt(WHEN, c.getLong(2)) + " · " + (sent ? "Me → " + who : who) + ": " + truncate(body, 300));
+            }
+        }
+        return out;
+    }
+
+    List<String> recentCalls(int limit) {
+        List<String> out = new ArrayList<>();
+        for (Doc d : readCalls()) {
+            for (String line : d.text.split("\n")) if (line.startsWith("- ") && out.size() < limit) out.add(line);
+        }
+        return out;
+    }
+
+    /** Events from the start of today through [days] days ahead, in order. */
+    List<String> upcomingEvents(int days) {
+        java.util.Calendar start = java.util.Calendar.getInstance();
+        start.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        start.set(java.util.Calendar.MINUTE, 0);
+        start.set(java.util.Calendar.SECOND, 0);
+        long from = start.getTimeInMillis();
+        long to = from + TimeUnit.DAYS.toMillis(days);
+        Uri.Builder uri = CalendarContract.Instances.CONTENT_URI.buildUpon();
+        android.content.ContentUris.appendId(uri, from);
+        android.content.ContentUris.appendId(uri, to);
+        String[] cols = {CalendarContract.Instances.BEGIN, CalendarContract.Instances.END, CalendarContract.Instances.TITLE,
+                CalendarContract.Instances.EVENT_LOCATION, CalendarContract.Instances.ALL_DAY};
+        List<String> out = new ArrayList<>();
+        try (Cursor c = context.getContentResolver().query(uri.build(), cols, null, null, CalendarContract.Instances.BEGIN + " ASC")) {
+            while (c != null && c.moveToNext() && out.size() < 40) {
+                long begin = c.getLong(0);
+                String when = c.getInt(4) == 1 ? fmt(DAY, begin) + ", all day" : fmt(WHEN, begin) + "–" + fmt(TIME, c.getLong(1));
+                String where = c.getString(3);
+                out.add("- " + when + ": " + nullToEmpty(c.getString(2)) + (where == null || where.trim().isEmpty() ? "" : " · at " + where.trim()));
+            }
+        }
+        return out;
+    }
+
+    /** Newest notifications, optionally only from apps whose name appears in the question. */
+    List<String> recentNotifications(int limit, String question) {
+        List<JSONObject> all = StudioNotificationListener.read(context);
+        Set<String> apps = new HashSet<>();
+        for (JSONObject n : all) apps.add(n.optString("app"));
+        String q = question.toLowerCase(Locale.ROOT);
+        Set<String> named = new HashSet<>();
+        for (String app : apps) if (!app.isEmpty() && q.contains(app.toLowerCase(Locale.ROOT))) named.add(app);
+        List<String> out = new ArrayList<>();
+        for (int i = all.size() - 1; i >= 0 && out.size() < limit; i--) {
+            JSONObject n = all.get(i);
+            if (!named.isEmpty() && !named.contains(n.optString("app"))) continue;
+            String title = n.optString("title");
+            out.add("- " + fmt(WHEN, n.optLong("time")) + " · " + n.optString("app") + " · " + (title.isEmpty() ? "" : title + ": ")
+                    + truncate(n.optString("text").replace('\n', ' '), 300));
+        }
+        return out;
+    }
+
     // ---------- Readers: each returns plain, dated, self-explaining text ----------
 
     private static final SimpleDateFormat WHEN = new SimpleDateFormat("EEE d MMM yyyy, HH:mm", Locale.getDefault());
@@ -293,7 +371,7 @@ final class Connections {
             List<String> lines = e.getValue();
             Collections.reverse(lines); // oldest first reads naturally
             String name = "SMS with " + who.get(e.getKey());
-            docs.add(new Doc("conn:sms:" + e.getKey(), name, "# " + name + "\n\n" + String.join("\n", lines)));
+            docs.add(new Doc("conn:sms:" + e.getKey(), name, "# SMS text messages with " + who.get(e.getKey()) + "\n\n" + String.join("\n", lines)));
         }
         return docs;
     }

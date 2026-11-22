@@ -304,7 +304,10 @@ function connectionRow(c) {
     </div>`;
   }
   const on = c.enabled && c.granted;
-  const status = on
+  const empty = on && c.lastSync && !c.items && !connections.indexing;
+  const status = empty && c.id === "sms"
+    ? `<span class="conn-status is-warn">Connected, but no SMS found</span> · On Xiaomi, Redmi, and POCO phones also allow it: App info → Permissions → Other permissions → Read SMS, then tap refresh.`
+    : on
     ? `<span class="conn-status is-on">Connected</span> · ${c.items} ${c.id === "storage" ? "files" : "items"}${c.lastSync ? ` · synced ${ago(c.lastSync)}` : ""}`
     : c.enabled && !c.granted ? `<span class="conn-status is-warn">Permission was removed</span>` : escapeHtml(c.description);
   const busy = !!connections.indexing;

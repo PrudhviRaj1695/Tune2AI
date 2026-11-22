@@ -63,6 +63,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 - [x] T2AI-022.2 `services/context/TokenCounter.kt`: chars/4 estimate with a `ponytail:` note (`estimateTokens` in `ContextManager.kt`); switch to the backend tokenizer if trimming misjudges.
 - [x] T2AI-022.3 `services/context/ContextManager.kt`: assemble, trim oldest conversation turns first, report `included`/`omitted` sources (sent as `Progress.sources`).
 - [x] T2AI-022.4 Tests: ordering, trimming at the limit, omitted-content report, empty sources.
+- [x] T2AI-022.5 `Tune2AI.Builder.addContextSource` and `BlockingContextSource` (Java-friendly) for app-provided context, added for Studio's live phone data (latest SMS, calls, calendar, notifications); a failing source leaves the request without its items (`ContextSourceTest`).
 
 ### T2AI-023 — Provide embedding and reranking services
 
