@@ -30,8 +30,14 @@ class EmbeddingService(private val models: ModelManager, private val router: Rou
     /** True if a model that can embed is registered and available. */
     fun isAvailable(): Boolean = models.candidates(Task.EMBEDDING).isNotEmpty()
 
-    /** Id of the model [embed] would use, or null if none is available. */
-    fun modelId(): String? = runCatching { router.route(Task.EMBEDDING, RequestOptions()).model.id }.getOrNull()
+    /**
+     * Id of the model [embed] would use: [preferred] when it is registered and available, otherwise
+     * the router's choice; null if no embedding model is available.
+     */
+    @JvmOverloads
+    fun modelId(preferred: String? = null): String? =
+        preferred?.let { p -> runCatching { router.route(Task.EMBEDDING, RequestOptions(model = p)).model.id }.getOrNull() }
+            ?: runCatching { router.route(Task.EMBEDDING, RequestOptions()).model.id }.getOrNull()
 
     /**
      * @throws Tune2AIException.NoCompatibleRoute if no embedding model is available.

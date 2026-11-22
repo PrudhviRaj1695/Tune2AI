@@ -65,9 +65,16 @@ public class ModelAdvisorTest {
     @Test
     public void embeddingModelIsDownloadableButNeverRecommendedForChat() {
         assertEquals(ModelAdvisor.EMBEDDER, ModelAdvisor.find("bge-small-en-v1.5-q8_0"));
+        assertEquals(ModelAdvisor.NOMIC, ModelAdvisor.find("nomic-embed-text-v1.5.q8_0"));
+        assertEquals(ModelAdvisor.GEMMA, ModelAdvisor.find("embeddinggemma-300m-q8_0"));
         for (ModelAdvisor.Assessment a : ModelAdvisor.assess(12 * GB, PLENTY, true)) {
-            assertTrue(a.entry != ModelAdvisor.EMBEDDER);
+            assertTrue(!ModelAdvisor.isEmbedder(a.entry));
         }
+        assertEquals(ModelAdvisor.GEMMA, ModelAdvisor.recommendedEmbedder(7_400_000_000L));
+        assertEquals(ModelAdvisor.NOMIC, ModelAdvisor.recommendedEmbedder(3_700_000_000L));
+        assertEquals(ModelAdvisor.EMBEDDER, ModelAdvisor.recommendedEmbedder(2_800_000_000L));
+        assertEquals(512, ModelAdvisor.embedderContext(ModelAdvisor.EMBEDDER));
+        assertEquals(2048, ModelAdvisor.embedderContext(ModelAdvisor.GEMMA));
     }
 
     private static String best(long totalRam) {

@@ -43,14 +43,17 @@ class RagEngine(
     @Volatile var chunking: ChunkingStrategy = chunker.strategy
     private val json = Json { ignoreUnknownKeys = true }
 
+    /** Embedding model to use when several are installed; null lets the router choose. */
+    @Volatile var preferredEmbeddingModel: String? = null
+
     /** Embedding model new content is indexed with, or null when retrieval uses keywords. */
-    fun embeddingModel(): String? = embeddings?.modelId()
+    fun embeddingModel(): String? = embeddings?.modelId(preferredEmbeddingModel)
 
     suspend fun add(id: String, name: String, text: String, metadata: Map<String, String> = emptyMap()): KnowledgeSource {
         if (id.isBlank()) throw Tune2AIException.InvalidRequest("A knowledge source needs an id")
         val strategy = chunking
         val pieces = Chunker(strategy).pieces(text)
-        val chunks = pieces.mapIndexed { i, p -> IndexedChunk(id, i, p.text, null, null, p.section) }
+        val chunks = pieces.mapIndexed { i, p -> IndexedChunk(id, i, p.text, null, null, p.section, p.parent) }
         val (vectors, modelId) = embed(name, chunks)
         index.replace(id, chunks.mapIndexed { i, c -> c.withVector(vectors?.get(i), modelId) })
         // The original text is kept so a different chunking strategy can re-split it later.
@@ -183,15 +186,29 @@ class RagEngine(
         // Diversity: at most MAX_PER_SOURCE chunks per document, unless only one document matched.
         val manySources = ranked.map { it.sourceId }.distinct().size > 1
         val perSource = HashMap<String, Int>()
+        val seenParents = HashSet<String>()
         val picked = ranked.filter { c ->
+            // Children of one parent share a passage: a second hit adds nothing new.
+            if (c.parent != null && !seenParents.add("${c.sourceId}\u0000${c.parent}")) return@filter false
             val n = perSource.getOrDefault(c.sourceId, 0)
             (!manySources || n < MAX_PER_SOURCE).also { if (it) perSource[c.sourceId] = n + 1 }
         }.take(limit).let { top ->
             if (!neighbors) top
             // Neighbour expansion: add the chunk before and after each hit, so the model sees the
             // sentences around a match (a table's header, the start of a list, the end of a story).
-            else top + top.flatMap { c -> listOf(c.index - 1, c.index + 1).mapNotNull { byKey["${c.sourceId}\u0000$it"] } }
-                .filter { n -> top.none { it === n } }.distinct()
+            // With parents, the neighbours are the chunks just outside the parent: the adjacent sections.
+            else top + top.flatMap { c ->
+                val family = if (c.parent == null) listOf(c) else chunks.filter { it.sourceId == c.sourceId && it.parent == c.parent }
+                listOf(family.minOf { it.index } - 1, family.maxOf { it.index } + 1).mapNotNull { byKey["${c.sourceId}\u0000$it"] }
+            }.filter { n -> top.none { it === n } }.distinct()
+        }.let { hits ->
+            // Parent-child: a matching child brings its whole parent (all its sibling chunks), so
+            // the model reads the full section while matching stayed precise.
+            val withParents = hits.flatMap { c ->
+                if (c.parent == null) listOf(c)
+                else chunks.filter { it.sourceId == c.sourceId && it.parent == c.parent }
+            }
+            withParents.distinct()
         }
 
         // Merge neighbouring chunks of one document into a single passage, keeping rank order.
@@ -223,7 +240,7 @@ class RagEngine(
 
     private suspend fun embed(sourceName: String, chunks: List<IndexedChunk>): Pair<List<FloatArray>?, String?> {
         val service = embeddings ?: return null to null
-        val model = service.modelId() ?: return null to null
+        val model = embeddingModel() ?: return null to null
         if (chunks.isEmpty()) return null to model
         val style = QueryStyle.of(model)
         val inputs = chunks.map { style.document(listOfNotNull(sourceName, it.section).joinToString(" › "), it.text) }
@@ -238,7 +255,7 @@ class RagEngine(
 
     private val keywords = KeywordIndex()
 
-    private fun IndexedChunk.withVector(vector: FloatArray?, modelId: String?) = IndexedChunk(sourceId, index, text, vector, modelId, section)
+    private fun IndexedChunk.withVector(vector: FloatArray?, modelId: String?) = IndexedChunk(sourceId, index, text, vector, modelId, section, parent)
 
     companion object {
         const val SOURCES = "rag.sources"
@@ -299,18 +316,23 @@ class RagEngine(
  * trained with these prefixes, and leaving them out costs accuracy.
  * ponytail: matched on the model id; move into ModelDescriptor metadata if apps bring other models.
  */
-internal class QueryStyle(private val queryPrefix: String, private val documentPrefix: String) {
-    fun query(text: String) = queryPrefix + text
-    fun document(title: String, text: String) = "$documentPrefix$title\n$text"
+internal class QueryStyle(private val queryFormat: (String) -> String, private val documentFormat: (String, String) -> String) {
+    fun query(text: String) = queryFormat(text)
+    fun document(title: String, text: String) = documentFormat(title, text)
 
     companion object {
         fun of(modelId: String): QueryStyle {
             val id = modelId.lowercase()
             return when {
-                "bge" in id && "-zh" !in id -> QueryStyle("Represent this sentence for searching relevant passages: ", "")
-                "nomic" in id -> QueryStyle("search_query: ", "search_document: ")
-                "e5" in id -> QueryStyle("query: ", "passage: ")
-                else -> QueryStyle("", "")
+                // EmbeddingGemma: prompts from its model card (retrieval task).
+                "embeddinggemma" in id || "gemma-embed" in id -> QueryStyle(
+                    { "task: search result | query: $it" },
+                    { title, text -> "title: ${title.ifBlank { "none" }} | text: $text" },
+                )
+                "bge" in id && "-zh" !in id && "m3" !in id -> QueryStyle({ "Represent this sentence for searching relevant passages: $it" }, { t, x -> "$t\n$x" })
+                "nomic" in id -> QueryStyle({ "search_query: $it" }, { t, x -> "search_document: $t\n$x" })
+                "e5" in id -> QueryStyle({ "query: $it" }, { t, x -> "passage: $t\n$x" })
+                else -> QueryStyle({ it }, { t, x -> "$t\n$x" })
             }
         }
     }

@@ -64,12 +64,32 @@ final class ModelAdvisor {
                     "Llama-3.2-3B-Instruct-Q4_K_M.gguf", 2_019_377_696L, "Best quality here. Needs a high-end phone.")));
 
     /**
-     * Embedding model for the Sources tab's semantic search: bge-small-en-v1.5, 384 dimensions,
-     * 512-token input. Small enough to stay loaded next to any chat model, so it is not rated.
+     * Offline embedding models for the Sources tab's search by meaning, smallest first. All run on
+     * llama.cpp (bert, nomic-bert, gemma-embedding). Sizes and file names checked against Hugging Face.
      */
-    static final Entry EMBEDDER = new Entry("BGE small (search)", "CompendiumLabs/bge-small-en-v1.5-gguf",
-            "bge-small-en-v1.5-q8_0.gguf", 36_806_944L, "Finds passages in your files by meaning, not only matching words.");
-    static final int EMBEDDER_CONTEXT = 512;
+    static final Entry EMBEDDER = new Entry("BGE small", "CompendiumLabs/bge-small-en-v1.5-gguf",
+            "bge-small-en-v1.5-q8_0.gguf", 36_806_944L, "Fastest. English. 384-dimension vectors.");
+    static final Entry NOMIC = new Entry("Nomic Embed v1.5", "nomic-ai/nomic-embed-text-v1.5-GGUF",
+            "nomic-embed-text-v1.5.Q8_0.gguf", 146_146_432L, "More accurate English search; reads longer passages.");
+    static final Entry GEMMA = new Entry("EmbeddingGemma 300M", "ggml-org/embeddinggemma-300M-GGUF",
+            "embeddinggemma-300M-Q8_0.gguf", 333_590_944L, "Best quality. 100+ languages, including Hindi, Telugu, and Tamil.");
+    static final List<Entry> EMBEDDERS = Collections.unmodifiableList(Arrays.asList(EMBEDDER, NOMIC, GEMMA));
+
+    static boolean isEmbedder(Entry e) {
+        return EMBEDDERS.contains(e);
+    }
+
+    /** Input length the embedder is loaded with: bge-small takes 512 tokens; the others up to 2048. */
+    static int embedderContext(Entry e) {
+        return e == EMBEDDER ? 512 : 2048;
+    }
+
+    /** The embedder to suggest for a phone: the best one whose memory fits comfortably beside a chat model. */
+    static Entry recommendedEmbedder(long totalRamBytes) {
+        if (totalRamBytes >= 5_500_000_000L) return GEMMA;
+        if (totalRamBytes >= 3_500_000_000L) return NOMIC;
+        return EMBEDDER;
+    }
 
     static final class Assessment {
         final Entry entry;
@@ -124,7 +144,8 @@ final class ModelAdvisor {
 
     static Entry find(String id) {
         for (Entry e : CATALOG) if (e.id.equals(id)) return e;
-        return EMBEDDER.id.equals(id) ? EMBEDDER : null;
+        for (Entry e : EMBEDDERS) if (e.id.equals(id)) return e;
+        return null;
     }
 
     static String gb(long bytes) {

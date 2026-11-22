@@ -219,6 +219,29 @@ class RagTest {
     }
 
     @Test
+    fun eachEmbeddingModelGetsItsOwnPromptFormat() {
+        val gemma = com.tune2ai.sdk.services.rag.QueryStyle.of("embeddinggemma-300m-q8_0")
+        assertEquals("task: search result | query: tax", gemma.query("tax"))
+        assertEquals("title: notes.md › Tax | text: Due Friday", gemma.document("notes.md › Tax", "Due Friday"))
+        assertEquals("search_query: tax", com.tune2ai.sdk.services.rag.QueryStyle.of("nomic-embed-text-v1.5.q8_0").query("tax"))
+    }
+
+    @Test
+    fun thePreferredEmbeddingModelIsUsedAndReindexSwitchesToIt() = runTest {
+        val manager = modelManager()
+        manager.register(fakeModel("small-embedder", memoryGb = 0.05, contextLength = 512, tasks = setOf(Task.EMBEDDING)))
+        manager.register(fakeModel("big-embedder", memoryGb = 0.3, contextLength = 2048, tasks = setOf(Task.EMBEDDING)))
+        val rag = RagEngine(InMemoryStorage(), EmbeddingService(manager, Router(manager)))
+        rag.preferredEmbeddingModel = "small-embedder"
+        assertEquals("small-embedder", rag.add("pets", "pets.txt", "Our cat Milo eats salmon.").embeddingModel)
+        rag.preferredEmbeddingModel = "big-embedder"
+        assertEquals(1, rag.reindex())
+        assertEquals("big-embedder", rag.sources().single().embeddingModel)
+        rag.preferredEmbeddingModel = "not-installed"
+        assertTrue("falls back to an available model", rag.embeddingModel() != null)
+    }
+
+        @Test
     fun bgeQueriesGetTheirRetrievalInstruction() {
         val style = com.tune2ai.sdk.services.rag.QueryStyle.of("bge-small-en-v1.5-q8_0")
         assertTrue(style.query("tax").startsWith("Represent this sentence"))
@@ -268,10 +291,46 @@ class RagTest {
         assertTrue(sections.first().text.contains("Short intro") && !sections.first().text.contains("Fact number"))
         assertTrue(fixed.all { it.text.length <= 800 })
         assertEquals("Details", fixed.last().section)
-        assertEquals(com.tune2ai.sdk.services.rag.ChunkingStrategy.SMART, com.tune2ai.sdk.services.rag.ChunkingStrategy.of("nope"))
+        assertEquals(com.tune2ai.sdk.services.rag.ChunkingStrategy.AUTO, com.tune2ai.sdk.services.rag.ChunkingStrategy.of("nope"))
     }
 
     @Test
+    fun adaptiveKeepsSmallDocumentsWhole() {
+        val note = "# Parking\n\nLevel 3, spot 42. The gate code changes monthly; ask reception."
+        val pieces = com.tune2ai.sdk.services.rag.Chunker().pieces(note)
+        assertEquals(1, pieces.size)
+        assertEquals(note, pieces.single().text)
+        assertEquals("Parking", pieces.single().section)
+    }
+
+    @Test
+    fun adaptiveSplitsLargeDocumentsIntoSectionParentsAndSmallChildren() {
+        val section = { name: String -> "# $name\n\n" + (1..30).joinToString(" ") { "$name fact $it is written here." } }
+        val doc = listOf("Flights", "Hotel", "Budget").joinToString("\n\n") { section(it) }
+        val pieces = com.tune2ai.sdk.services.rag.Chunker().pieces(doc)
+        assertTrue(pieces.all { it.parent != null && it.text.length <= 100 * 4 + 120 })
+        val byParent = pieces.groupBy { it.parent }
+        assertTrue("several children per parent", byParent.values.any { it.size > 1 })
+        assertTrue("parents never span two sections", byParent.values.all { kids -> kids.map { it.section }.distinct().size == 1 })
+        assertEquals(listOf("Flights", "Hotel", "Budget"), pieces.map { it.section }.distinct())
+    }
+
+    @Test
+    fun aChildMatchReturnsItsWholeParentOnce() = runTest {
+        val rag = engine(withEmbedder = false)
+        // Large enough (~700 tokens) to be split; each section fits one ~400-token parent.
+        val doc = "# Hotel\n\n" + (1..40).joinToString(" ") { "Hotel detail $it is noted." } + " The safe code is behind the mirror." +
+            "\n\n# Flights\n\n" + (1..40).joinToString(" ") { "Flight detail $it is noted." }
+        rag.add("trip", "trip.md", doc)
+        val hits = rag.retrieve("where is the hotel safe behind the mirror", limit = 3)
+        val passage = hits.first()
+        assertEquals("Hotel", passage.section)
+        assertTrue("the whole parent section", passage.text.contains("Hotel detail 1 is noted") && passage.text.contains("behind the mirror"))
+        assertTrue("not the other section", !passage.text.contains("Flight detail"))
+        assertEquals("one passage per parent", hits.size, hits.map { it.index }.distinct().size)
+    }
+
+        @Test
     fun rechunkResplitsExistingDocumentsFromTheirOriginalText() = runTest {
         val rag = engine(withEmbedder = false)
         val text = (1..40).joinToString(" ") { "Sentence $it about apples." }

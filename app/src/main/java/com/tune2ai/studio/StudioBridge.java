@@ -149,7 +149,8 @@ final class StudioBridge {
         android.content.SharedPreferences p = settingsPrefs();
         ai.getPrivacy().setRedactSensitive(p.getBoolean("redact", true));
         ai.getPrivacy().setPersonalContextWithRemote(p.getBoolean("remoteContext", false));
-        ai.getKnowledge().setChunking(com.tune2ai.sdk.services.rag.ChunkingStrategy.of(p.getString("chunking", "smart")));
+        ai.getKnowledge().setChunking(com.tune2ai.sdk.services.rag.ChunkingStrategy.of(p.getString("chunking", "auto")));
+        ai.getKnowledge().setPreferredEmbeddingModel(p.getString("embedder", null));
         ai.getKnowledge().setIncludeNeighbors(p.getBoolean("neighbors", false));
         String prompt = p.getString("prompt", null);
         if (prompt != null) registerPrompt(prompt, p.getInt("promptVersion", FIRST_CUSTOM_VERSION));
@@ -229,6 +230,16 @@ final class StudioBridge {
         ai.getKnowledge().setIncludeNeighbors(neighbors);
         settingsPrefs().edit().putString("chunking", id).putBoolean("neighbors", neighbors).apply();
         knowledgeChanged();
+    }
+
+    /** Makes [id] the embedding model for search and re-embeds documents made with another one. */
+    @JavascriptInterface
+    public void useEmbedder(String id) {
+        if (ModelAdvisor.find(id) == null || !ModelAdvisor.isEmbedder(ModelAdvisor.find(id))) return;
+        ai.getKnowledge().setPreferredEmbeddingModel(id);
+        settingsPrefs().edit().putString("embedder", id).apply();
+        knowledgeChanged();
+        reindexKnowledge();
     }
 
     @JavascriptInterface
@@ -499,7 +510,7 @@ final class StudioBridge {
             modelsChanged();
             downloadEvent(entry.id, "done", entry.sizeBytes, entry.sizeBytes, null);
             notice(entry.name + " is ready.");
-            if (entry == ModelAdvisor.EMBEDDER) reindexKnowledge(); // embed what was indexed by keyword
+            if (ModelAdvisor.isEmbedder(entry)) useEmbedder(entry.id); // switch to it and embed existing documents
         } catch (ModelDownloader.CancelledException e) {
             downloadingId = null;
             downloadEvent(entry.id, "cancelled", 0, entry.sizeBytes, null);
@@ -571,13 +582,23 @@ final class StudioBridge {
             o.put("staleChunks", stale);
             String model = ai.getKnowledge().embeddingModel();
             o.put("embeddingModel", model == null ? JSONObject.NULL : model);
-            JSONObject embedder = new JSONObject();
-            embedder.put("id", ModelAdvisor.EMBEDDER.id);
-            embedder.put("name", ModelAdvisor.EMBEDDER.name);
-            embedder.put("sizeBytes", ModelAdvisor.EMBEDDER.sizeBytes);
-            embedder.put("installed", model != null);
-            embedder.put("downloading", ModelAdvisor.EMBEDDER.id.equals(downloadingId));
-            o.put("embedder", embedder);
+            // Every offline embedding model: installed or not, which one is active, which one suits this phone.
+            java.util.Set<String> installed = new java.util.HashSet<>();
+            for (ModelInfo info : ai.getModels().listBlocking()) installed.add(info.getDescriptor().getId());
+            ActivityManager.MemoryInfo mem = new ActivityManager.MemoryInfo();
+            ((ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE)).getMemoryInfo(mem);
+            ModelAdvisor.Entry recommended = ModelAdvisor.recommendedEmbedder(mem.totalMem);
+            JSONArray embedders = new JSONArray();
+            for (ModelAdvisor.Entry e : ModelAdvisor.EMBEDDERS) {
+                embedders.put(new JSONObject().put("id", e.id).put("name", e.name).put("blurb", e.blurb).put("sizeBytes", e.sizeBytes)
+                        .put("installed", installed.contains(e.id)).put("active", e.id.equals(model))
+                        .put("downloading", e.id.equals(downloadingId)).put("recommended", e == recommended));
+            }
+            o.put("embedders", embedders);
+            // Kept for older pages: the first embedder.
+            o.put("embedder", new JSONObject().put("id", ModelAdvisor.EMBEDDER.id).put("name", ModelAdvisor.EMBEDDER.name)
+                    .put("sizeBytes", ModelAdvisor.EMBEDDER.sizeBytes).put("installed", model != null)
+                    .put("downloading", ModelAdvisor.EMBEDDER.id.equals(downloadingId)));
             o.put("indexing", indexing == null ? JSONObject.NULL : indexing);
 
             java.util.List<com.tune2ai.sdk.api.KnowledgeSource> sources = ai.getKnowledge().sourcesBlocking();
@@ -1034,8 +1055,8 @@ final class StudioBridge {
         String base = file.getName().substring(0, file.getName().length() - ".gguf".length());
         String id = base.toLowerCase(Locale.ROOT);
         ModelAdvisor.Entry known = ModelAdvisor.find(id); // downloaded from the catalog: use its tidy name
-        boolean embedder = known == ModelAdvisor.EMBEDDER;
-        int context = embedder ? ModelAdvisor.EMBEDDER_CONTEXT : CONTEXT_LENGTH;
+        boolean embedder = known != null && ModelAdvisor.isEmbedder(known);
+        int context = embedder ? ModelAdvisor.embedderContext(known) : CONTEXT_LENGTH;
         return new ModelDescriptor(
                 id,
                 known != null ? known.name : base.replace('-', ' ').replace('_', ' '),

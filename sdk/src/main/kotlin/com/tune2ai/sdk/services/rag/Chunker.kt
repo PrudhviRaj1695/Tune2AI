@@ -1,7 +1,10 @@
 package com.tune2ai.sdk.services.rag
 
-/** One chunk of a document and the section heading it sits under (null before the first heading). */
-data class Piece(val text: String, val section: String?)
+/**
+ * One chunk of a document and the section heading it sits under (null before the first heading).
+ * [parent] groups child chunks of one parent passage (adaptive chunking); null for flat strategies.
+ */
+data class Piece(val text: String, val section: String?, val parent: Int? = null)
 
 /** How a [ChunkingStrategy] decides where chunks end. */
 enum class ChunkingMode {
@@ -13,6 +16,14 @@ enum class ChunkingMode {
 
     /** Fixed-size word windows that ignore sentences and headings. The classic baseline. */
     FIXED,
+
+    /**
+     * Size-aware parent-child: a short document stays one chunk; a long one is split into
+     * section-aware parents of up to [ChunkingStrategy.parentTokens], each split into small
+     * children of [ChunkingStrategy.windowTokens]. Children are searched; the matching parent is
+     * what the model reads (precise matching, full context).
+     */
+    ADAPTIVE,
 }
 
 /**
@@ -20,13 +31,31 @@ enum class ChunkingMode {
  * ones give the model more surrounding context per passage. Changing it applies to new documents;
  * `KnowledgeApi.rechunk` re-splits existing ones.
  */
-data class ChunkingStrategy(val id: String, val mode: ChunkingMode, val windowTokens: Int, val overlapTokens: Int) {
+data class ChunkingStrategy @JvmOverloads constructor(
+    val id: String,
+    val mode: ChunkingMode,
+    val windowTokens: Int,
+    val overlapTokens: Int,
+    /** ADAPTIVE: largest parent passage. */
+    val parentTokens: Int = 0,
+    /** ADAPTIVE: documents up to this size stay a single chunk. */
+    val wholeDocumentTokens: Int = 0,
+) {
     init {
         require(windowTokens > 0 && overlapTokens in 0 until windowTokens) { "Need 0 <= overlap < window" }
+        require(mode != ChunkingMode.ADAPTIVE || (parentTokens > windowTokens && wholeDocumentTokens > 0)) {
+            "Adaptive chunking needs parentTokens > windowTokens and wholeDocumentTokens > 0"
+        }
     }
 
     companion object {
-        /** Default: paragraph- and sentence-aware ~200-token chunks with a sentence of overlap. */
+        /**
+         * Default. Short documents (up to ~350 tokens: notes, messages, small files) are one chunk;
+         * longer ones get section-aware ~400-token parents with ~100-token children.
+         */
+        @JvmField val AUTO = ChunkingStrategy("auto", ChunkingMode.ADAPTIVE, 100, 20, parentTokens = 400, wholeDocumentTokens = 350)
+
+        /** Paragraph- and sentence-aware ~200-token chunks with a sentence of overlap. */
         @JvmField val SMART = ChunkingStrategy("smart", ChunkingMode.SENTENCES, 200, 40)
 
         /** Small chunks for exact facts (numbers, names, dates) in dense documents. */
@@ -41,9 +70,9 @@ data class ChunkingStrategy(val id: String, val mode: ChunkingMode, val windowTo
         /** Fixed word windows: predictable sizes for logs, CSV, and text without sentences. */
         @JvmField val FIXED = ChunkingStrategy("fixed", ChunkingMode.FIXED, 200, 40)
 
-        @JvmField val ALL = listOf(SMART, PRECISE, BROAD, SECTIONS, FIXED)
+        @JvmField val ALL = listOf(AUTO, SMART, PRECISE, BROAD, SECTIONS, FIXED)
 
-        @JvmStatic fun of(id: String): ChunkingStrategy = ALL.firstOrNull { it.id == id } ?: SMART
+        @JvmStatic fun of(id: String): ChunkingStrategy = ALL.firstOrNull { it.id == id } ?: AUTO
     }
 }
 
@@ -61,7 +90,7 @@ data class ChunkingStrategy(val id: String, val mode: ChunkingMode, val windowTo
  * The default window fits small embedding models (bge-small takes 512 tokens) with room for the
  * title and section prefix, and a few passages stay well inside a 4k chat context.
  */
-class Chunker(val strategy: ChunkingStrategy = ChunkingStrategy.SMART) {
+class Chunker(val strategy: ChunkingStrategy = ChunkingStrategy.AUTO) {
     constructor(windowTokens: Int, overlapTokens: Int) :
         this(ChunkingStrategy("custom", ChunkingMode.SENTENCES, windowTokens, overlapTokens))
 
@@ -74,6 +103,7 @@ class Chunker(val strategy: ChunkingStrategy = ChunkingStrategy.SMART) {
         val normalized = text.replace("\r\n", "\n").replace('\t', ' ').replace(Regex(" {2,}"), " ").trim()
         if (normalized.isEmpty()) return emptyList()
         if (strategy.mode == ChunkingMode.FIXED) return fixedWindows(normalized)
+        if (strategy.mode == ChunkingMode.ADAPTIVE) return adaptive(normalized)
 
         val out = mutableListOf<Piece>()
         var current = mutableListOf<Unit>() // sentences of the chunk being built
@@ -107,6 +137,18 @@ class Chunker(val strategy: ChunkingStrategy = ChunkingStrategy.SMART) {
         }
         flush(keepOverlap = false)
         return out
+    }
+
+    /** Whole document if short; otherwise section-aware parents, each split into overlapping children. */
+    private fun adaptive(text: String): List<Piece> {
+        if ((text.length + 3) / 4 <= strategy.wholeDocumentTokens) {
+            return listOf(Piece(text, HEADING_LINE.find(text)?.groupValues?.get(1)?.trim(), parent = 0))
+        }
+        val parents = Chunker(ChunkingStrategy("parents", ChunkingMode.SECTIONS, strategy.parentTokens, 0)).pieces(text)
+        val children = Chunker(ChunkingStrategy("children", ChunkingMode.SENTENCES, strategy.windowTokens, strategy.overlapTokens))
+        return parents.flatMapIndexed { p, parent ->
+            children.pieces(parent.text).map { Piece(it.text, parent.section, parent = p) }
+        }
     }
 
     /** Word windows of [windowChars] stepping back [overlapChars]; each keeps the heading it starts under. */
@@ -184,6 +226,7 @@ class Chunker(val strategy: ChunkingStrategy = ChunkingStrategy.SMART) {
 
     private companion object {
         val HEADING = Regex("^#{1,6}\\s+(.+)$")
+        val HEADING_LINE = Regex("(?m)^#{1,6}\\s+(.+)$")
         // Whitespace after . ! ? or after . ! ? plus a closing quote/bracket. Fixed-length lookbehinds
         // only: Android's ICU regex engine is stricter than the JVM's (see T2AI-021.3).
         val SENTENCE_END = Regex("(?<=[.!?])\\s+|(?<=[.!?][\"')\\]])\\s+")

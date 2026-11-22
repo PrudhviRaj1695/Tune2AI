@@ -298,6 +298,10 @@ h1, h2, h3, p { margin: 0; }
 .apply-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); }
 .apply-row small { flex: 1; color: var(--ink-2); font-size: 12px; }
 
+/* Embedding models */
+.embedders-note { margin: 0; padding: 12px 14px; border-bottom: 1px solid var(--line); color: var(--ink-2); font-size: 13px; }
+.embedders .list-row .meter { margin-top: 8px; }
+
 /* Agent actions: prepared by the agent, run only when the user taps */
 .action-card {
   display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;

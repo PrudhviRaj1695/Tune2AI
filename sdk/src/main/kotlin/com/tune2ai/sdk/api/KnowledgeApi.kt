@@ -38,6 +38,14 @@ class KnowledgeApi internal constructor(
         get() = engine.chunking
         set(value) { engine.chunking = value }
 
+    /**
+     * Embedding model to use when several are registered (null: the router chooses). After changing
+     * it, call [reindex] so existing documents are embedded with it; until then they are found by keyword.
+     */
+    var preferredEmbeddingModel: String?
+        get() = engine.preferredEmbeddingModel
+        set(value) { engine.preferredEmbeddingModel = value }
+
     /** Embedding model used for new content and search, or null when search is by keyword. */
     fun embeddingModel(): String? = engine.embeddingModel()
 

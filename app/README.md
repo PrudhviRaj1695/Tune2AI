@@ -34,7 +34,15 @@ Supported: plain text, Markdown, CSV/TSV, JSON, XML, HTML (tags stripped), Word 
 
 How retrieval works: documents are split into ~200-token chunks along paragraphs and sentences, and each chunk remembers its Markdown section. Each question is answered from a hybrid of meaning-based search (when the search model is installed) and keyword search, merged with reciprocal rank fusion; neighbouring chunks are joined into one passage, and one document supplies at most two passages unless it is the only match. Passages reach the model numbered, with an instruction to cite them.
 
-Search works right away by keyword (BM25). **Search by meaning** downloads BGE small (37 MB, an embedding model); Studio then re-indexes existing documents so search also finds passages that say the same thing in other words. **Try a search** shows exactly which passages a question would retrieve.
+Search works right away by keyword (BM25). **Search by meaning** offers three offline embedding models (all run by llama.cpp on the phone):
+
+| Model | Size | Languages | Notes |
+|---|---|---|---|
+| BGE small v1.5 | 37 MB | English | Fastest; 512-token input |
+| Nomic Embed v1.5 | 146 MB | English | More accurate; 2,048-token input |
+| EmbeddingGemma 300M | 334 MB | 100+ (Hindi, Telugu, Tamil, …) | Best quality for its size; 2,048-token input |
+
+The one marked *Best for this phone* depends on RAM (EmbeddingGemma from about 6 GB, Nomic from about 4 GB, else BGE small). Get downloads it and switches to it; **Use** switches between installed ones. Switching re-embeds existing documents in the background; until that finishes they are still found by keyword. Each model gets the query and document prompts it was trained with (for example `task: search result | query: …` for EmbeddingGemma). **Try a search** shows exactly which passages a question would retrieve.
 
 ## Connections
 
@@ -84,7 +92,7 @@ Chats are saved after every reply in app-private storage (`files/chats/`, one JS
   - Run trace shows "Privacy guard · N sensitive values hidden".
 
 **Sources → Use sources in chat:**
-- **How documents are split:** Smart (default, ~200-token paragraph/sentence chunks), Precise (~100 tokens, for exact facts), Broad (~380 tokens, for context-heavy answers), By section (one per heading or PDF page), Fixed size (word windows, for logs and CSV). New documents use the choice; **Apply** re-splits existing ones from their stored original text and re-embeds them.
+- **How documents are split:** **Auto** (default): documents up to ~350 tokens stay one passage; larger ones are split by section into parents (~400 tokens) and each parent into small children (~100 tokens). Search matches children (precise), the model reads the whole parent (context), and two hits in one parent count once. Or Smart (~200-token paragraph/sentence chunks), Precise (~100 tokens, for exact facts), Broad (~380 tokens, for context-heavy answers), By section (one per heading or PDF page), Fixed size (word windows, for logs and CSV). New documents use the choice; **Apply** re-splits existing ones from their stored original text and re-embeds them.
 - **Include neighbouring passages:** adds the chunk before and after each match.
 
 **Speed with large sources (internal storage).** Keyword search uses an in-memory inverted index built once per document, so a question over thousands of files takes milliseconds rather than seconds. Retrieved passages and live phone data go into the latest message (`contextInLatestMessage`) and the system prompt carries only the date, so llama.cpp reuses its prompt cache and only processes the new message, not the whole conversation. Indexing runs at background priority and pauses between files while a reply is being written. If answers are still slow: fewer *Passages per answer*, *Include neighbouring passages* off, a smaller model (Qwen2.5 1.5B instead of Llama 3.2 3B), and a New chat for unrelated questions (shorter history). The Run trace shows where the time goes: a long *Context Manager* step is retrieval, a long first-token time is the model reading its input.

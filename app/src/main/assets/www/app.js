@@ -198,7 +198,7 @@ function renderCatalog() {
 
 function startDownload(id) {
   if (Object.keys(downloads).length) return;
-  const m = device.models.find((x) => x.id === id) || (knowledge?.embedder.id === id ? knowledge.embedder : null);
+  const m = device.models.find((x) => x.id === id) || knowledge?.embedders?.find((x) => x.id === id) || null;
   if (!m) return;
   downloads[id] = { received: 0, total: m.sizeBytes };
   renderCatalog();
@@ -224,15 +224,15 @@ function onDownload(e) {
     delete downloads[e.id];
     clearInterval(previewTimer);
     if (e.state === "done") {
-      const embedder = knowledge?.embedder.id === e.id;
+      const embedder = !!knowledge?.embedders?.some((x) => x.id === e.id);
       if (live) {
         if (!embedder) state.model = e.id;
         loadLiveModels();
       } else if (embedder) {
         Object.assign(knowledge, { embeddingModel: e.id });
-        knowledge.embedder.installed = true;
+        knowledge.embedders.forEach((x) => { x.active = x.id === e.id; if (x.id === e.id) x.installed = true; });
         knowledge.sources.forEach((src) => { src.smart = true; });
-        toast(`${knowledge.embedder.name} is ready. Search now matches by meaning.`);
+        toast(`${knowledge.embedders.find((x) => x.id === e.id).name} is ready. Search now matches by meaning.`);
       } else {
         device.models.find((m) => m.id === e.id).installed = true;
         toast(`${device.models.find((m) => m.id === e.id).name} is ready.`);
@@ -276,7 +276,8 @@ const PROMPT_PRESETS = {
   detailed: "You are a patient expert assistant running privately on the user's phone. It is now {{today}}.\n\nExplain step by step. Use Markdown headings for longer answers, numbered steps for procedures, tables for comparisons, and fenced code blocks for code. When passages are provided, ground the answer in them and cite like [1]. End with a one-line summary.",
 };
 const CHUNKING_INFO = {
-  smart: ["Smart (recommended)", "Paragraphs and sentences, about 200 tokens with a sentence of overlap."],
+  auto: ["Auto (recommended)", "Small documents stay whole. Large ones split by section into parents (~400 tokens) with small children (~100): search matches a child, the model reads the whole parent."],
+  smart: ["Smart", "Paragraphs and sentences, about 200 tokens with a sentence of overlap."],
   precise: ["Precise", "Small passages (about 100 tokens) for exact facts: numbers, names, dates."],
   broad: ["Broad", "Large passages (about 380 tokens) for explanations that need context."],
   sections: ["By section", "One passage per heading or PDF page. Best for structured notes and manuals."],
@@ -286,7 +287,7 @@ let settings = null;
 
 function loadSettings() {
   settings = live ? JSON.parse(bridge.settings())
-    : settings || { prompt: DEFAULT_PROMPT, defaultPrompt: DEFAULT_PROMPT, customPrompt: false, promptVersion: 5, redact: true, remoteContext: false, chunking: "smart", neighbors: false };
+    : settings || { prompt: DEFAULT_PROMPT, defaultPrompt: DEFAULT_PROMPT, customPrompt: false, promptVersion: 5, redact: true, remoteContext: false, chunking: "auto", neighbors: false };
   $("#system-prompt").value = settings.prompt;
   markPreset();
   $("#guard-redact").checked = settings.redact;
@@ -335,7 +336,7 @@ $("#temperature").addEventListener("input", () => {
 }));
 
 function renderChunking(k) {
-  const current = k.chunking || "smart";
+  const current = k.chunking || "auto";
   $("#chunking-list").innerHTML = Object.entries(CHUNKING_INFO).map(([id, [name, about]]) => `
     <label class="choice${id === current ? " is-on" : ""}">
       <input type="radio" name="chunking" value="${id}" ${id === current ? "checked" : ""} />
@@ -348,10 +349,10 @@ function renderChunking(k) {
 }
 
 function saveChunking() {
-  const id = $('input[name="chunking"]:checked')?.value || "smart";
+  const id = $('input[name="chunking"]:checked')?.value || "auto";
   const neighbors = $("#neighbors-switch").checked;
   if (live) bridge.setChunking(id, neighbors);
-  else { Object.assign(knowledge, { chunking: id, neighbors, staleChunks: id === "smart" ? 0 : knowledge.sources.length }); renderKnowledge(); }
+  else { Object.assign(knowledge, { chunking: id, neighbors, staleChunks: id === "auto" ? 0 : knowledge.sources.length }); renderKnowledge(); }
 }
 $("#chunking-list").addEventListener("change", saveChunking);
 $("#neighbors-switch").addEventListener("change", saveChunking);
@@ -478,13 +479,18 @@ document.addEventListener("click", (event) => {
    In a browser preview there is no bridge; a sample index stands in. */
 const PREVIEW_KNOWLEDGE = {
   enabled: true,
-  chunking: "smart",
+  chunking: "auto",
   neighbors: false,
   staleChunks: 0,
   passagesPerAnswer: 3,
   minSimilarity: 0.55,
   embeddingModel: null,
-  embedder: { id: "bge-small-en-v1.5-q8_0", name: "BGE small (search)", sizeBytes: 36806944, installed: false, downloading: false },
+  embedder: { id: "bge-small-en-v1.5-q8_0", name: "BGE small", sizeBytes: 36806944, installed: false, downloading: false },
+  embedders: [
+    { id: "bge-small-en-v1.5-q8_0", name: "BGE small", blurb: "Fastest. English. 384-dimension vectors.", sizeBytes: 36806944, installed: false, active: false, recommended: false },
+    { id: "nomic-embed-text-v1.5.q8_0", name: "Nomic Embed v1.5", blurb: "More accurate English search; reads longer passages.", sizeBytes: 146146432, installed: false, active: false, recommended: false },
+    { id: "embeddinggemma-300m-q8_0", name: "EmbeddingGemma 300M", blurb: "Best quality. 100+ languages, including Hindi, Telugu, and Tamil.", sizeBytes: 333590944, installed: false, active: false, recommended: true },
+  ],
   indexing: null,
   folders: [{ uri: "preview:Documents", name: "Documents", files: 2 }],
   sources: [
@@ -537,17 +543,31 @@ function renderKnowledge() {
       ${ix.current ? `<small>${escapeHtml(ix.current)}</small>` : ""}
     </div>` : "";
 
-  const e = k.embedder;
-  const dl = downloads[e.id];
-  $("#sources-embedder").innerHTML = e.installed ? "" : `
-    <div class="card upgrade-card">
-      <div class="model-text">
-        <strong>Search by meaning</strong>
-        <small>${dl ? `Downloading ${gb(dl.received)} of ${gb(dl.total)}` : `Right now search matches words. Download ${escapeHtml(e.name)} (${gb(e.sizeBytes)}) to also find passages that say the same thing differently.`}</small>
-        ${dl ? `<div class="meter"><span style="width:${(dl.received / dl.total) * 100}%"></span></div>` : ""}
-      </div>
-      ${dl ? `<button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button>`
-        : `<button class="pill-button" type="button" data-download="${e.id}" ${Object.keys(downloads).length ? "disabled" : ""}>${svgIcon("i-download")}Get</button>`}
+  const embedders = k.embedders || [];
+  const active = embedders.find((x) => x.active);
+  const busy = Object.keys(downloads).length > 0 || !!k.indexing;
+  $("#sources-embedder").innerHTML = `
+    <h3 class="label">Search by meaning</h3>
+    <div class="card list embedders">
+      <p class="embedders-note">${active
+        ? `Using <b>${escapeHtml(active.name)}</b>. Switching re-embeds your documents.`
+        : "Search matches words right now. An offline embedding model also finds passages that say the same thing differently."}</p>
+      ${embedders.map((x) => {
+        const dl = downloads[x.id];
+        const action = x.active ? `<span class="model-state" data-state="loaded">Active</span>`
+          : dl ? `<button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button>`
+          : x.installed ? `<button class="pill-button" type="button" data-use-embedder="${x.id}" ${busy ? "disabled" : ""}>Use</button>`
+          : `<button class="pill-button" type="button" data-download="${x.id}" ${busy ? "disabled" : ""}>${svgIcon("i-download")}Get</button>`;
+        return `
+        <div class="list-row">
+          <div class="model-text">
+            <strong>${escapeHtml(x.name)}${x.recommended ? '<span class="best-badge">Best for this phone</span>' : ""}</strong>
+            <small>${dl ? `Downloading ${gb(dl.received)} of ${gb(dl.total)}` : `${gb(x.sizeBytes)} · ${escapeHtml(x.blurb)}`}</small>
+            ${dl ? `<div class="meter"><span style="width:${(dl.received / dl.total) * 100}%"></span></div>` : ""}
+          </div>
+          ${action}
+        </div>`;
+      }).join("")}
     </div>`;
 
   $("#folders-group").hidden = !k.folders.length;
@@ -609,6 +629,18 @@ document.addEventListener("click", (event) => {
   if (removeFolder) {
     if (live) bridge.removeKnowledgeFolder(removeFolder);
     else { knowledge.folders = knowledge.folders.filter((f) => f.uri !== removeFolder); knowledge.sources = knowledge.sources.filter((src) => !src.inFolder); renderKnowledge(); renderRuntime(); }
+  }
+});
+
+document.addEventListener("click", (event) => {
+  const use = event.target.closest("[data-use-embedder]")?.dataset.useEmbedder;
+  if (!use) return;
+  if (live) bridge.useEmbedder(use);
+  else {
+    knowledge.embedders.forEach((x) => { x.active = x.id === use; });
+    knowledge.embeddingModel = use;
+    renderKnowledge();
+    toast("Switched. Your documents are re-embedded in the background.");
   }
 });
 
