@@ -6,7 +6,7 @@ Context for coding agents and new contributors. Read this first, then the story 
 
 Tune2AI is an on-device AI SDK for mobile apps (chat, tool-using agents, workflows) with an optional remote model backend. Tune2AI Studio (`:app`) is the Android sample and developer console.
 
-**Current state:** Milestones 1–5 are done (ONNX Runtime, T2AI-012, is deferred by decision D8). Tune2AI Studio is live: on-device chat through llama.cpp and remote chat through any OpenAI-compatible endpoint, both through the public SDK. Agent mode is live (tools: `device_status`, `list_models`, `current_time`). Workflow mode, memory, and RAG are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
+**Current state:** Milestones 1–5 are done (ONNX Runtime, T2AI-012, is deferred by decision D8). Tune2AI Studio is live: on-device chat through llama.cpp and remote chat through any OpenAI-compatible endpoint, both through the public SDK. Agent mode is live (tools: `device_status`, `list_models`, `current_time`). RAG is live (T2AI-023/024): the Studio **Sources** tab connects folders, files, notes, and shares from other apps, and chat searches them on the device. Workflow mode and memory are still simulated or disabled in Studio until their milestones. See `app/README.md` to run it.
 
 ## Where things are
 
@@ -40,6 +40,13 @@ llama.cpp device tests need a small model on the device (skipped otherwise):
 mkdir -p models && curl -L -o models/SmolLM2-135M-Instruct-Q8_0.gguf   https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q8_0.gguf
 MSYS_NO_PATHCONV=1 adb push models/SmolLM2-135M-Instruct-Q8_0.gguf /data/local/tmp/tune2ai-test.gguf
 ./gradlew :sdk-llama:connectedDebugAndroidTest
+```
+
+The embedding device test (`EmbeddingDeviceTest`) needs bge-small-en-v1.5 (37 MB), and is skipped otherwise:
+
+```sh
+curl -L -o models/bge-small-en-v1.5-q8_0.gguf https://huggingface.co/CompendiumLabs/bge-small-en-v1.5-gguf/resolve/main/bge-small-en-v1.5-q8_0.gguf
+MSYS_NO_PATHCONV=1 adb push models/bge-small-en-v1.5-q8_0.gguf /data/local/tmp/tune2ai-embed.gguf
 ```
 
 On Windows Git Bash, prefix `adb` commands that take device paths with `MSYS_NO_PATHCONV=1`; otherwise `/data/...` is rewritten to a Windows path. The first `:sdk-llama` build installs the NDK and CMake and compiles llama.cpp (about 7 minutes); later builds are incremental.

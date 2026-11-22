@@ -44,6 +44,14 @@ interface InferenceBackend {
     suspend fun unload(model: LoadedModel)
 
     fun generate(model: LoadedModel, request: GenerateRequest): Flow<String>
+
+    /**
+     * Optional (T2AI-023): one L2-normalised vector per text, all the same length. Backends that
+     * embed list [com.tune2ai.sdk.api.Task.EMBEDDING] in [capabilities]; texts longer than the
+     * model's input limit are truncated by the backend.
+     */
+    suspend fun embed(model: LoadedModel, texts: List<String>): List<FloatArray> =
+        throw com.tune2ai.sdk.api.Tune2AIException.NoCompatibleRoute("Backend '$id' does not compute embeddings")
 }
 
 /** True if this backend supports [model]'s format and is allowed to run it (ignores availability). */

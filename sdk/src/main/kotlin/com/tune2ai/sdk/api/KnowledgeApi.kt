@@ -1,0 +1,76 @@
+package com.tune2ai.sdk.api
+
+import com.tune2ai.sdk.services.rag.RagEngine
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.runBlocking
+
+/**
+ * The app's knowledge index (RAG, FR-SVC-5). Get it from `Tune2AI.knowledge`.
+ *
+ * Text added here is chunked and stored on the device. While [enabled], every chat and agent
+ * request includes the chunks most relevant to the user's message, through the Context Manager.
+ * Register a model with [Task.EMBEDDING] for semantic search; without one, search is by keyword.
+ */
+class KnowledgeApi internal constructor(
+    private val engine: RagEngine,
+    private val ready: Deferred<Unit>,
+) {
+    /** Whether requests include retrieved knowledge. On by default. */
+    @Volatile var enabled: Boolean = true
+
+    /** Embedding model used for new content and search, or null when search is by keyword. */
+    fun embeddingModel(): String? = engine.embeddingModel()
+
+    /** Adds a document, or replaces the one with the same [id]. */
+    suspend fun add(id: String, name: String, text: String, metadata: Map<String, String> = emptyMap()): KnowledgeSource {
+        ready.await()
+        return engine.add(id, name, text, metadata)
+    }
+
+    /** Removes a document; it never appears in later retrieval. Returns false if it was not there. */
+    suspend fun remove(id: String): Boolean {
+        ready.await()
+        return engine.delete(id)
+    }
+
+    suspend fun sources(): List<KnowledgeSource> {
+        ready.await()
+        return engine.sources()
+    }
+
+    /** The chunks a request for [query] would include, best first. */
+    suspend fun search(query: String, limit: Int = 3): List<RetrievedChunk> {
+        ready.await()
+        return engine.retrieve(query, limit)
+    }
+
+    /** Embeds documents stored before the current embedding model was available. */
+    suspend fun reindex(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        ready.await()
+        return engine.reindex(onProgress)
+    }
+
+    suspend fun clear() {
+        ready.await()
+        engine.clear()
+    }
+
+    /** Blocking [add] for Java callers. Call from a background thread. */
+    fun addBlocking(id: String, name: String, text: String, metadata: Map<String, String>): KnowledgeSource =
+        runBlocking { add(id, name, text, metadata) }
+
+    fun removeBlocking(id: String): Boolean = runBlocking { remove(id) }
+
+    fun sourcesBlocking(): List<KnowledgeSource> = runBlocking { sources() }
+
+    fun searchBlocking(query: String, limit: Int): List<RetrievedChunk> = runBlocking { search(query, limit) }
+
+    /** Blocking [reindex] for Java callers; [onProgress] receives (done, total). */
+    fun reindexBlocking(onProgress: ProgressListener): Int = runBlocking { reindex { done, total -> onProgress.onProgress(done, total) } }
+
+    fun clearBlocking() = runBlocking { clear() }
+
+    fun interface ProgressListener {
+        fun onProgress(done: Int, total: Int)
+    }
+}

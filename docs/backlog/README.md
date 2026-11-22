@@ -26,7 +26,7 @@ Work milestones in order. Within a milestone, follow each story's **Depends on**
 | 4 | Backend coverage | T2AI-012, 014, 015, 044, 054 | ONNX Runtime, optional Remote API (SDK + Studio settings), Model API |
 | 5 | Agents and tools | T2AI-033, 034, 042 | Bounded agent calls a registered tool |
 | 6 | Workflows | T2AI-035, 036, 043 | Workflows run, persist, and resume |
-| 7 | AI services | T2AI-023, 024, 025 | Embeddings, RAG, and memory feed context |
+| 7 | AI services | T2AI-023, 024, 025 | Embeddings, RAG, and memory feed context (023 and 024 done; 025 memory to do) |
 | 8 | iOS | T2AI-003, 013, 051 | iOS adapter, Core ML, iOS sample (after Kotlin Multiplatform conversion, D1) |
 | 9 | Release | T2AI-052, 053 | Docs and versioned packages |
 

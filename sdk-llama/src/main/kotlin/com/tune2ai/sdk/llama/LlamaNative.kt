@@ -26,6 +26,12 @@ internal object LlamaNative {
         sink: TokenSink,
     ): String?
 
+    /** Loads an embedding model (context outputs pooled embeddings). 0 on failure. */
+    @JvmStatic external fun loadEmbedder(path: String, contextLength: Int, threads: Int): Long
+
+    /** L2-normalised embedding of [text], truncated to the context length; null on failure. */
+    @JvmStatic external fun embed(handle: Long, text: String): FloatArray?
+
     @JvmStatic external fun cancel(handle: Long)
 
     @JvmStatic external fun free(handle: Long)

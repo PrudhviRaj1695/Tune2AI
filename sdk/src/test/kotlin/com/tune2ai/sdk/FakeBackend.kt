@@ -23,7 +23,7 @@ class FakeBackend(
     var unavailable: String? = null,
     network: Boolean = false,
 ) : InferenceBackend {
-    override val capabilities = BackendCapabilities(formats, setOf(Task.CHAT), requiresNetwork = network)
+    override val capabilities = BackendCapabilities(formats, setOf(Task.CHAT, Task.EMBEDDING), requiresNetwork = network)
     override val unavailableReason: String? get() = unavailable
     var loads = 0
         private set
@@ -46,6 +46,26 @@ class FakeBackend(
         unloads++
     }
 
+    /** Length of vectors from [embed]; change it between calls to simulate a mismatched model. */
+    var embedDimensions = 256
+    var embedCalls = 0
+        private set
+
+    /** Hashed bag of words (stop words dropped), L2-normalised: texts sharing words get similar vectors. */
+    var embedOverride: ((List<String>) -> List<FloatArray>)? = null
+
+    override suspend fun embed(model: LoadedModel, texts: List<String>): List<FloatArray> {
+        embedCalls++
+        embedOverride?.let { return it(texts) }
+        return texts.map { text ->
+            val v = FloatArray(embedDimensions)
+            com.tune2ai.sdk.services.rag.RagEngine.terms(text).forEach { v[Math.floorMod(it.hashCode(), embedDimensions)] += 1f }
+            val norm = kotlin.math.sqrt(v.sumOf { (it * it).toDouble() }).toFloat()
+            if (norm > 0) for (i in v.indices) v[i] /= norm
+            v
+        }
+    }
+
     /** Scripted replies: each generate call takes the next one; when empty, [tokens] is used. */
     val script = ArrayDeque<List<String>>()
 
@@ -66,4 +86,5 @@ fun fakeModel(
     format: String = "fake",
     path: String = "/models/$id.$format",
     contextLength: Int = 4096,
-) = ModelDescriptor(id, id.replaceFirstChar { it.uppercase() }, format, path, (memoryGb * GB).toLong(), contextLength)
+    tasks: Set<Task> = setOf(Task.CHAT),
+) = ModelDescriptor(id, id.replaceFirstChar { it.uppercase() }, format, path, (memoryGb * GB).toLong(), contextLength, tasks)

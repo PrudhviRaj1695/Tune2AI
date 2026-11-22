@@ -4,6 +4,7 @@ import android.content.Context
 import com.tune2ai.sdk.api.AgentApi
 import com.tune2ai.sdk.api.BackendInfo
 import com.tune2ai.sdk.api.ChatApi
+import com.tune2ai.sdk.api.KnowledgeApi
 import com.tune2ai.sdk.api.ModelsApi
 import com.tune2ai.sdk.api.ResourceLimits
 import com.tune2ai.sdk.api.ResourceSnapshot
@@ -18,9 +19,12 @@ import com.tune2ai.sdk.inference.BackendRegistry
 import com.tune2ai.sdk.inference.InferenceBackend
 import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
+import com.tune2ai.sdk.services.embedding.EmbeddingService
 import com.tune2ai.sdk.services.model.ModelManager
 import com.tune2ai.sdk.services.prompt.PromptManager
 import com.tune2ai.sdk.services.prompt.PromptTemplate
+import com.tune2ai.sdk.services.rag.RagContextSource
+import com.tune2ai.sdk.services.rag.RagEngine
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -48,7 +52,17 @@ class Tune2AI private constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
     private val ready = scope.async { manager.restore() }
-    private val controller = RequestController(manager, Router(manager), ContextManager(prompts, defaultTemplate))
+    private val router = Router(manager)
+    private val rag = RagEngine(platform.storage, EmbeddingService(manager, router))
+
+    /** On-device knowledge (RAG): add documents; requests then include the relevant parts. */
+    val knowledge = KnowledgeApi(rag, ready)
+
+    private val controller = RequestController(
+        manager,
+        router,
+        ContextManager(prompts, defaultTemplate, sources = listOf(RagContextSource(rag) { knowledge.enabled })),
+    )
 
     val chat = ChatApi(controller, platform.storage, scope, ready)
     val agent = AgentApi(AgentEngine(controller, ToolCallingEngine(tools)), scope, ready)

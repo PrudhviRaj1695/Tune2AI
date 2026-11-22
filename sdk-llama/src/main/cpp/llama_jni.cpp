@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -243,6 +244,89 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
     env->DeleteLocalRef(sink_class);
     if (env->ExceptionCheck()) return nullptr; // let the Kotlin exception propagate
     return error ? env->NewStringUTF(error) : nullptr;
+}
+
+// Embedding models (T2AI-023): a context that outputs pooled embeddings instead of logits.
+// n_batch = n_ubatch = n_ctx, because non-causal (BERT-style) models must see a text in one ubatch.
+JNIEXPORT jlong JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_loadEmbedder(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads) {
+    auto mparams = llama_model_default_params();
+    mparams.n_gpu_layers = 0;
+    llama_model * model = llama_model_load_from_file(str(env, path).c_str(), mparams);
+    if (!model) return 0;
+
+    auto cparams = llama_context_default_params();
+    cparams.n_ctx = (uint32_t) n_ctx;
+    cparams.n_batch = (uint32_t) n_ctx;
+    cparams.n_ubatch = (uint32_t) n_ctx;
+    cparams.n_threads = n_threads;
+    cparams.n_threads_batch = n_threads;
+    cparams.embeddings = true; // pooling type comes from the model's metadata
+    llama_context * ctx = llama_init_from_model(model, cparams);
+    if (!ctx) {
+        llama_model_free(model);
+        return 0;
+    }
+    auto * s = new Session();
+    s->model = model;
+    s->ctx = ctx;
+    llama_set_abort_callback(ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
+    return reinterpret_cast<jlong>(s);
+}
+
+// One L2-normalised embedding for text, truncated to the context length. Null on failure.
+JNIEXPORT jfloatArray JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_embed(JNIEnv * env, jclass, jlong handle, jstring text_j) {
+    Session * s = session(handle);
+    s->cancel.store(false);
+    const llama_vocab * vocab = llama_model_get_vocab(s->model);
+    const std::string text = str(env, text_j);
+
+    const int32_t n_needed = -llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), nullptr, 0, true, false);
+    std::vector<llama_token> tokens(std::max<int32_t>(n_needed, 0));
+    if (n_needed > 0 && llama_tokenize(vocab, text.c_str(), (int32_t) text.size(), tokens.data(), n_needed, true, false) < 0) {
+        return nullptr;
+    }
+    const int32_t limit = (int32_t) std::min(llama_n_ctx(s->ctx), llama_n_batch(s->ctx));
+    if ((int32_t) tokens.size() > limit) tokens.resize(limit); // ponytail: truncates; chunks are sized to fit
+    if (tokens.empty()) return nullptr;
+
+    llama_memory_clear(llama_get_memory(s->ctx), true); // each text is independent
+    llama_batch_ext * batch = llama_batch_ext_init(s->ctx);
+    for (int32_t i = 0; i < (int32_t) tokens.size(); ++i) {
+        const int32_t idx = llama_batch_ext_add_token(batch, 0, tokens[i]);
+        const llama_pos pos = i;
+        llama_batch_ext_set_pos(batch, idx, &pos);
+        llama_batch_ext_set_output_embd(batch, idx, true);
+    }
+    const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+    llama_batch_ext_free(batch);
+    if (rc != 0) {
+        __android_log_print(ANDROID_LOG_WARN, TAG, "embedding failed (rc=%d, %d tokens)", rc, (int) tokens.size());
+        return nullptr;
+    }
+
+    const int32_t n_embd = llama_model_n_embd_out(s->model);
+    std::vector<float> out(n_embd, 0.0f);
+    if (llama_pooling_type(s->ctx) == LLAMA_POOLING_TYPE_NONE) {
+        for (int32_t i = 0; i < (int32_t) tokens.size(); ++i) { // mean-pool token embeddings ourselves
+            const float * e = llama_get_embeddings_ith(s->ctx, i);
+            if (!e) return nullptr;
+            for (int32_t j = 0; j < n_embd; ++j) out[j] += e[j] / (float) tokens.size();
+        }
+    } else {
+        const float * e = llama_get_embeddings_seq(s->ctx, 0);
+        if (!e) return nullptr;
+        std::copy(e, e + n_embd, out.begin());
+    }
+    double norm = 0.0;
+    for (float v : out) norm += (double) v * v;
+    norm = std::sqrt(norm);
+    if (norm > 0.0) for (float & v : out) v = (float) (v / norm);
+
+    jfloatArray result = env->NewFloatArray(n_embd);
+    env->SetFloatArrayRegion(result, 0, n_embd, out.data());
+    return result;
 }
 
 JNIEXPORT void JNICALL

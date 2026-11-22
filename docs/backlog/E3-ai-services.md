@@ -66,7 +66,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 ### T2AI-023 — Provide embedding and reranking services
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 7 · **Requirements:** FR-SVC-4 · **Depends on:** T2AI-010, T2AI-020
 
 **Story:** As an application developer, I want text embedding and optional reranking so that stored content can be searched for relevant context.
@@ -79,31 +79,31 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 
 **Tasks**
 
-- [ ] T2AI-023.1 Add `embed` to the inference capabilities (optional operation) and implement it in `:sdk-llama`.
-- [ ] T2AI-023.2 `services/embedding/EmbeddingService.kt` and `Reranker.kt` (interface; default implementation = cosine re-score).
-- [ ] T2AI-023.3 Tests: dimension mismatch error, stable ordering for equal scores.
+- [x] T2AI-023.1 Add `embed` to the inference capabilities (optional operation) and implement it in `:sdk-llama`. A model registered only for `Task.EMBEDDING` gets an embeddings context (pooling from the model, L2-normalised, truncated to the context length).
+- [x] T2AI-023.2 `services/embedding/EmbeddingService.kt` and `Reranker.kt` (interface; default implementation = cosine re-score).
+- [x] T2AI-023.3 Tests: dimension mismatch error, stable ordering for equal scores (`EmbeddingTest`), plus `EmbeddingDeviceTest` for llama.cpp (needs bge-small-en-v1.5 on the device; skipped otherwise).
 
 ### T2AI-024 — Implement the RAG engine
 
-- **Status:** Todo
+- **Status:** Done
 - **Milestone:** 7 · **Requirements:** FR-SVC-5 · **Depends on:** T2AI-004, T2AI-022, T2AI-023
 
 **Story:** As an application developer, I want to add, update, delete, and retrieve content so that model requests can use application knowledge.
 
 **Acceptance criteria**
 
-- Content is chunked and indexed with the embedding service.
+- Content is chunked and indexed with the embedding service (keyword-only until an embedding model is registered).
 - Retrieval returns ranked chunks with source ids and metadata.
 - Updated or deleted content never appears in later retrieval.
 - The Context Manager includes retrieved chunks as a context source.
 
 **Tasks**
 
-- [ ] T2AI-024.1 `services/rag/Chunker.kt` (fixed token windows with overlap).
-- [ ] T2AI-024.2 `services/rag/VectorIndex.kt` brute-force cosine over vectors in `Storage` (D5), with a `ponytail:` note on the corpus-size ceiling.
-- [ ] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve.
-- [ ] T2AI-024.4 `RagContextSource` registered with the Context Manager.
-- [ ] T2AI-024.5 Tests: update replaces, delete removes, top-k ordering.
+- [x] T2AI-024.1 `services/rag/Chunker.kt` (fixed token windows with overlap).
+- [x] T2AI-024.2 `services/rag/VectorIndex.kt` brute-force cosine over vectors in `Storage` (D5), with a `ponytail:` note on the corpus-size ceiling. One record per chunk: Android cannot read SQLite rows over 2 MB.
+- [x] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve. Without an embedding model, chunks are stored without vectors and retrieval uses BM25 keyword scoring; `reindex()` embeds them once a model is registered. Public surface: `Tune2AI.knowledge` (`KnowledgeApi`).
+- [x] T2AI-024.4 `RagContextSource` registered with the Context Manager; `knowledge.enabled` switches it per request.
+- [x] T2AI-024.5 Tests (`RagTest`): update replaces, delete removes (also after restart), top-k ordering, keyword fallback, reindex, disabled source, chat request includes retrieved chunks.
 
 ### T2AI-025 — Implement the memory engine
 
