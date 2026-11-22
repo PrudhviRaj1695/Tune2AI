@@ -104,6 +104,7 @@ Goal: the Model Manager that owns model state, and the Context Manager with the 
 - [x] T2AI-024.3 `services/rag/RagEngine.kt`: add/update (replace all chunks of a source)/delete/retrieve. Without an embedding model, chunks are stored without vectors and retrieval uses BM25 keyword scoring; `reindex()` embeds them once a model is registered. Public surface: `Tune2AI.knowledge` (`KnowledgeApi`).
 - [x] T2AI-024.4 `RagContextSource` registered with the Context Manager; `knowledge.enabled` switches it per request.
 - [x] T2AI-024.5 Tests (`RagTest`): update replaces, delete removes (also after restart), top-k ordering, keyword fallback, reindex, disabled source, chat request includes retrieved chunks.
+- [x] T2AI-024.6 Retrieval tuning (added after first use): paragraph/sentence-aware chunks that keep their Markdown section; title and section embedded with each chunk; per-model query instructions (`QueryStyle`, e.g. bge); hybrid ranking (cosine + BM25 with a query-coverage rule) merged by reciprocal rank fusion; neighbouring chunks merged into one passage; at most two passages per document; numbered passages with citation guidance; `passagesPerAnswer` and `minSimilarity` on `KnowledgeApi`; `passage(ref)` to show a cited passage. Tests cover each.
 
 ### T2AI-025 — Implement the memory engine
 

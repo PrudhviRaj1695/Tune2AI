@@ -7,10 +7,8 @@ import com.tune2ai.sdk.api.Tune2AIException
 import com.tune2ai.sdk.core.Storage
 import com.tune2ai.sdk.services.context.ContextItem
 import com.tune2ai.sdk.services.context.ContextSource
-import com.tune2ai.sdk.services.embedding.CosineReranker
 import com.tune2ai.sdk.services.embedding.EmbeddingService
-import com.tune2ai.sdk.services.embedding.RerankCandidate
-import com.tune2ai.sdk.services.embedding.Reranker
+import com.tune2ai.sdk.services.embedding.cosine
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.Json
 import kotlin.math.ln
@@ -18,10 +16,19 @@ import kotlin.math.ln
 /**
  * Add, update, delete, and retrieve app knowledge (FR-SVC-5, T2AI-024.3).
  *
- * Text is chunked and, when an embedding model is available, embedded; retrieval then ranks by
- * cosine similarity. Without one, chunks are still stored and retrieval falls back to BM25 keyword
- * scoring, so an app works before (or without) downloading an embedding model. [reindex] embeds
- * chunks stored earlier without vectors.
+ * Indexing: text is split into section-aware chunks ([Chunker]); each chunk is embedded together
+ * with its document title and section heading, so "the deadline" in a section called "Tax" is
+ * found by a question about tax deadlines. Without an embedding model, chunks are stored without
+ * vectors and [reindex] embeds them later.
+ *
+ * Retrieval is hybrid:
+ * 1. Semantic: cosine similarity between the query (with the model's query instruction, see
+ *    [QueryStyle]) and each chunk, keeping those above the similarity floor.
+ * 2. Keyword: BM25 over chunk text, title, and section, keeping chunks that contain enough of the
+ *    query's words (exact names and numbers that embeddings miss).
+ * 3. The two rankings are merged with reciprocal rank fusion, at most [MAX_PER_SOURCE] passages
+ *    come from one document unless it is the only match, and neighbouring chunks of the same
+ *    document are merged into one passage so the model sees the whole thought once.
  *
  * Adding an existing id replaces all of its chunks; deleted content never appears in retrieval.
  */
@@ -29,7 +36,6 @@ class RagEngine(
     private val storage: Storage,
     private val embeddings: EmbeddingService?,
     private val chunker: Chunker = Chunker(),
-    private val reranker: Reranker = CosineReranker(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val index = VectorIndex(storage)
@@ -40,9 +46,10 @@ class RagEngine(
 
     suspend fun add(id: String, name: String, text: String, metadata: Map<String, String> = emptyMap()): KnowledgeSource {
         if (id.isBlank()) throw Tune2AIException.InvalidRequest("A knowledge source needs an id")
-        val pieces = chunker.chunk(text)
-        val (vectors, modelId) = embed(pieces)
-        index.replace(id, pieces.mapIndexed { i, t -> IndexedChunk(id, i, t, vectors?.get(i), modelId) })
+        val pieces = chunker.pieces(text)
+        val chunks = pieces.mapIndexed { i, p -> IndexedChunk(id, i, p.text, null, null, p.section) }
+        val (vectors, modelId) = embed(name, chunks)
+        index.replace(id, chunks.mapIndexed { i, c -> c.withVector(vectors?.get(i), modelId) })
         val source = KnowledgeSource(id, name, metadata, pieces.size, text.length, clock(), modelId)
         storage.put(SOURCES, VectorIndex.keyOf(id), json.encodeToString(KnowledgeSource.serializer(), source))
         return source
@@ -71,55 +78,110 @@ class RagEngine(
         val stale = sources().filter { it.embeddingModel != model }
         stale.forEachIndexed { n, source ->
             val chunks = index.chunksOf(source.id)
-            val (vectors, modelId) = embed(chunks.map { it.text })
-            index.replace(source.id, chunks.mapIndexed { i, c -> IndexedChunk(c.sourceId, c.index, c.text, vectors?.get(i), modelId) })
+            val (vectors, modelId) = embed(source.name, chunks)
+            index.replace(source.id, chunks.mapIndexed { i, c -> c.withVector(vectors?.get(i), modelId) })
             storage.put(SOURCES, VectorIndex.keyOf(source.id), json.encodeToString(KnowledgeSource.serializer(), source.copy(embeddingModel = modelId)))
             onProgress(n + 1, stale.size)
         }
         return stale.size
     }
 
+    /** The passage behind a trace reference such as "notes.md#2" or "notes.md#2-3". */
+    suspend fun passage(ref: String): RetrievedChunk? {
+        val match = REF.matchEntire(ref) ?: return null
+        val (name, first, last) = match.destructured
+        val source = sources().firstOrNull { it.name == name } ?: return null
+        val chunks = index.chunksOf(source.id)
+        val from = first.toInt() - 1
+        val to = (last.ifEmpty { first }).toInt() - 1
+        val picked = chunks.filter { it.index in from..to }.ifEmpty { return null }
+        return RetrievedChunk(source.id, source.name, from, mergeTexts(picked.map { it.text }), 0f, false, source.metadata, to, picked.first().section)
+    }
+
     /**
-     * Up to [limit] chunks relevant to [query], best first. Uses embeddings for chunks embedded by
-     * the current model, then fills remaining places by keyword match. Chunks below the relevance
-     * floor are left out, so an unrelated question retrieves nothing.
+     * Up to [limit] passages relevant to [query], best first; fewer (or none) when nothing is
+     * relevant enough. [minSimilarity] is the cosine floor for semantic matches: raise it for
+     * stricter retrieval, lower it to retrieve more loosely related passages.
      */
-    suspend fun retrieve(query: String, limit: Int = 3): List<RetrievedChunk> {
+    suspend fun retrieve(query: String, limit: Int = 3, minSimilarity: Float = MIN_COSINE): List<RetrievedChunk> {
         if (query.isBlank() || limit <= 0) return emptyList()
         val chunks = index.all()
         if (chunks.isEmpty()) return emptyList()
         val sources = sources().associateBy { it.id }
-        val results = mutableListOf<RetrievedChunk>()
+        fun key(c: IndexedChunk) = "${c.sourceId}\u0000${c.index}"
+        val byKey = chunks.associateBy(::key)
 
+        // 1. Semantic ranking.
         val model = embeddingModel()
         val embedded = if (model == null) emptyList() else chunks.filter { it.modelId == model && it.vector != null }
+        val cosines = HashMap<String, Float>()
+        var semanticRan = false
         if (embedded.isNotEmpty()) {
-            val queryVector = runCatching { embeddings!!.embed(listOf(query), model).vectors.single() }
+            val queryVector = runCatching { embeddings!!.embed(listOf(QueryStyle.of(model!!).query(query)), model).vectors.single() }
                 .onFailure { if (it is CancellationException) throw it }
                 .getOrNull()
             if (queryVector != null && queryVector.size == embedded.first().vector!!.size) {
-                val byKey = embedded.associateBy { "${it.sourceId}\u0000${it.index}" }
-                reranker.rerank(query, queryVector, embedded.map { RerankCandidate("${it.sourceId}\u0000${it.index}", it.text, it.vector) })
-                    .filter { it.score >= MIN_COSINE }
-                    .take(limit)
-                    .forEach { r -> results += byKey.getValue(r.id).toResult(sources, r.score, byEmbedding = true) }
+                semanticRan = true
+                embedded.forEach { cosines[key(it)] = cosine(queryVector, it.vector!!) }
             }
         }
-        if (results.size < limit) {
-            val taken = results.map { it.sourceId to it.index }.toSet()
-            val rest = chunks.filter { (it.sourceId to it.index) !in taken }
-            keywordRank(query, rest).take(limit - results.size).forEach { (c, score) -> results += c.toResult(sources, score, byEmbedding = false) }
+        val semantic = cosines.entries.filter { it.value >= minSimilarity }.sortedByDescending { it.value }.take(CANDIDATES).map { it.key }
+
+        // 2. Keyword ranking. Keyword-only hits must cover enough of the question to count.
+        val keywordScores = keywordRank(query, chunks) { c -> listOfNotNull(sources[c.sourceId]?.name, c.section).joinToString(" ") }
+        val keyword = keywordScores.filter { (_, s) -> s.coverage >= (if (semanticRan) 0.5f else 0.34f) }
+            .take(CANDIDATES).map { key(it.first) }
+        val topBm25 = keywordScores.firstOrNull()?.second?.score ?: 1f
+
+        // 3. Reciprocal rank fusion.
+        val fused = HashMap<String, Float>()
+        semantic.forEachIndexed { rank, k -> fused[k] = (fused[k] ?: 0f) + 1f / (RRF_K + rank + 1) }
+        keyword.forEachIndexed { rank, k -> fused[k] = (fused[k] ?: 0f) + 1f / (RRF_K + rank + 1) }
+        val ranked = fused.entries.sortedByDescending { it.value }.map { byKey.getValue(it.key) }
+
+        // Diversity: at most MAX_PER_SOURCE chunks per document, unless only one document matched.
+        val manySources = ranked.map { it.sourceId }.distinct().size > 1
+        val perSource = HashMap<String, Int>()
+        val picked = ranked.filter { c ->
+            val n = perSource.getOrDefault(c.sourceId, 0)
+            (!manySources || n < MAX_PER_SOURCE).also { if (it) perSource[c.sourceId] = n + 1 }
+        }.take(limit)
+
+        // Merge neighbouring chunks of one document into a single passage, keeping rank order.
+        val scoreOf = { c: IndexedChunk ->
+            cosines[key(c)]?.takeIf { key(c) in semantic } ?: (keywordScores.firstOrNull { it.first === c }?.second?.score?.div(topBm25) ?: 0f)
         }
-        return results
+        val groups = mutableListOf<MutableList<IndexedChunk>>()
+        for (c in picked) {
+            val group = groups.firstOrNull { g -> g.first().sourceId == c.sourceId && g.any { kotlin.math.abs(it.index - c.index) == 1 } }
+            if (group != null) group += c else groups += mutableListOf(c)
+        }
+        return groups.map { g ->
+            val ordered = g.sortedBy { it.index }
+            val first = ordered.first()
+            val source = sources[first.sourceId]
+            RetrievedChunk(
+                sourceId = first.sourceId,
+                sourceName = source?.name ?: first.sourceId,
+                index = first.index,
+                text = mergeTexts(ordered.map { it.text }),
+                score = g.maxOf(scoreOf),
+                byEmbedding = g.any { key(it) in semantic },
+                metadata = source?.metadata.orEmpty(),
+                lastIndex = ordered.last().index,
+                section = first.section,
+            )
+        }
     }
 
-    private suspend fun embed(texts: List<String>): Pair<List<FloatArray>?, String?> {
+    private suspend fun embed(sourceName: String, chunks: List<IndexedChunk>): Pair<List<FloatArray>?, String?> {
         val service = embeddings ?: return null to null
         val model = service.modelId() ?: return null to null
-        if (texts.isEmpty()) return null to model
+        if (chunks.isEmpty()) return null to model
+        val style = QueryStyle.of(model)
+        val inputs = chunks.map { style.document(listOfNotNull(sourceName, it.section).joinToString(" › "), it.text) }
         return try {
-            val vectors = texts.chunked(EMBED_BATCH).flatMap { service.embed(it, model).vectors }
-            vectors to model
+            inputs.chunked(EMBED_BATCH).flatMap { service.embed(it, model).vectors } to model
         } catch (e: CancellationException) {
             throw e
         } catch (e: Tune2AIException) {
@@ -127,60 +189,101 @@ class RagEngine(
         }
     }
 
-    /** BM25 over the given chunks; only chunks sharing at least one query term score. */
-    private fun keywordRank(query: String, chunks: List<IndexedChunk>): List<Pair<IndexedChunk, Float>> {
+    private class Bm25(val score: Float, val coverage: Float)
+
+    /**
+     * BM25 over chunk text plus [extra] (title and section, so a question naming a document finds
+     * it). Only chunks sharing at least one query term are returned, best first, with the share of
+     * distinct query terms they contain.
+     */
+    private fun keywordRank(query: String, chunks: List<IndexedChunk>, extra: (IndexedChunk) -> String): List<Pair<IndexedChunk, Bm25>> {
         val terms = terms(query).distinct()
-        if (terms.isEmpty() || chunks.isEmpty()) return emptyList()
-        val docs = chunks.map { it to terms(it.text) }
+        if (terms.isEmpty()) return emptyList()
+        val docs = chunks.map { it to terms(it.text + " " + extra(it)) }
         val avgLength = docs.sumOf { it.second.size }.toDouble() / docs.size
         val df = terms.associateWith { t -> docs.count { (_, words) -> t in words } }
         return docs.mapNotNull { (chunk, words) ->
             val counts = words.groupingBy { it }.eachCount()
             var score = 0.0
+            var matched = 0
             for (t in terms) {
                 val tf = counts[t] ?: continue
+                matched++
                 val idf = ln(1 + (docs.size - df.getValue(t) + 0.5) / (df.getValue(t) + 0.5))
                 score += idf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * words.size / avgLength))
             }
-            if (score > 0) chunk to score.toFloat() else null
-        }.sortedByDescending { it.second }
+            if (matched > 0) chunk to Bm25(score.toFloat(), matched.toFloat() / terms.size) else null
+        }.sortedByDescending { it.second.score }
     }
 
-    private fun IndexedChunk.toResult(sources: Map<String, KnowledgeSource>, score: Float, byEmbedding: Boolean): RetrievedChunk {
-        val source = sources[sourceId]
-        return RetrievedChunk(sourceId, source?.name ?: sourceId, index, text, score, byEmbedding, source?.metadata.orEmpty())
-    }
+    private fun IndexedChunk.withVector(vector: FloatArray?, modelId: String?) = IndexedChunk(sourceId, index, text, vector, modelId, section)
 
     companion object {
         const val SOURCES = "rag.sources"
         private const val EMBED_BATCH = 16
+        private const val CANDIDATES = 20
+        private const val RRF_K = 60f
+        private const val MAX_PER_SOURCE = 2
         private const val K1 = 1.2
         private const val B = 0.75
+        private val REF = Regex("^(.*)#(\\d+)(?:-(\\d+))?$")
 
         /**
-         * ponytail: one floor for every embedding model, tuned for bge-small (unrelated text scores
-         * about 0.3–0.5). Make it per-model if other embedders retrieve too much or too little.
+         * ponytail: one default floor, tuned for bge-small (unrelated text scores about 0.3–0.5).
+         * Apps can change it per request through `KnowledgeApi.minSimilarity`.
          */
         const val MIN_COSINE = 0.55f
 
         private val STOP_WORDS = setOf(
-            "a", "an", "and", "are", "as", "at", "be", "by", "can", "do", "does", "for", "from", "how", "i", "in", "is", "it",
-            "me", "my", "of", "on", "or", "our", "tell", "that", "the", "this", "to", "was", "what", "when", "where", "which",
-            "who", "why", "with", "you", "your",
+            "a", "about", "an", "and", "any", "are", "as", "at", "be", "by", "can", "could", "did", "do", "does", "for",
+            "from", "had", "has", "have", "how", "i", "if", "in", "is", "it", "its", "me", "my", "of", "on", "or", "our",
+            "please", "should", "so", "tell", "than", "that", "the", "their", "them", "then", "there", "these", "this",
+            "to", "was", "we", "were", "what", "when", "where", "which", "who", "why", "will", "with", "would", "you", "your",
         )
 
         internal fun terms(text: String): List<String> =
             Regex("[\\p{L}\\p{N}]+").findAll(text.lowercase()).map { it.value }.filter { it.length > 1 && it !in STOP_WORDS }.toList()
+
+        /** Joins consecutive chunks, dropping the overlap the [Chunker] repeated between them. */
+        internal fun mergeTexts(texts: List<String>): String = texts.reduce { acc, next ->
+            val max = minOf(acc.length, next.length, 600)
+            val overlap = (max downTo 20).firstOrNull { n -> acc.endsWith(next.substring(0, n)) } ?: 0
+            if (overlap > 0) acc + next.substring(overlap) else "$acc\n\n$next"
+        }
     }
 }
 
 /**
- * Feeds retrieved chunks to the Context Manager (T2AI-024.4), the only path from RAG to a model.
- * [enabled] is read on every request, so the app can switch knowledge on and off at any time.
+ * How an embedding model expects queries and documents to be phrased. Retrieval models are
+ * trained with these prefixes, and leaving them out costs accuracy.
+ * ponytail: matched on the model id; move into ModelDescriptor metadata if apps bring other models.
+ */
+internal class QueryStyle(private val queryPrefix: String, private val documentPrefix: String) {
+    fun query(text: String) = queryPrefix + text
+    fun document(title: String, text: String) = "$documentPrefix$title\n$text"
+
+    companion object {
+        fun of(modelId: String): QueryStyle {
+            val id = modelId.lowercase()
+            return when {
+                "bge" in id && "-zh" !in id -> QueryStyle("Represent this sentence for searching relevant passages: ", "")
+                "nomic" in id -> QueryStyle("search_query: ", "search_document: ")
+                "e5" in id -> QueryStyle("query: ", "passage: ")
+                else -> QueryStyle("", "")
+            }
+        }
+    }
+}
+
+/**
+ * Feeds retrieved passages to the Context Manager (T2AI-024.4), the only path from RAG to a model.
+ * Passages are numbered so the model can cite them ([1], [2]); [limit], [minSimilarity], and
+ * [enabled] are read on every request, so the app can change them at any time.
  */
 class RagContextSource(
     private val engine: RagEngine,
-    private val limit: Int = 3,
+    private val limit: () -> Int = { 3 },
+    private val minSimilarity: () -> Float = { RagEngine.MIN_COSINE },
     private val enabled: () -> Boolean = { true },
 ) : ContextSource {
     override val name = "rag"
@@ -189,14 +292,20 @@ class RagContextSource(
         if (!enabled()) return emptyList()
         // Knowledge is an enhancement: if retrieval fails, the request goes ahead without it.
         val hits = try {
-            engine.retrieve(query, limit)
+            engine.retrieve(query, limit(), minSimilarity())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             emptyList()
         }
-        return hits.map { c ->
-            ContextItem("${c.sourceName}#${c.index + 1}", "From \"${c.sourceName}\": ${c.text}")
+        return hits.mapIndexed { i, c ->
+            val where = listOfNotNull(c.sourceName, c.section).joinToString(" › ")
+            ContextItem(c.ref, "[${i + 1}] $where\n${c.text}")
         }
     }
+
+    override fun render(items: List<ContextItem>): String =
+        "Passages from the user's own documents, most relevant first. Use them when they answer the question " +
+            "and cite each one you use like [1]. If they do not contain the answer, say so instead of guessing.\n\n" +
+            items.joinToString("\n\n") { it.text }
 }

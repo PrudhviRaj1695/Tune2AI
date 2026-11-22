@@ -19,7 +19,14 @@ data class KnowledgeSource(
     val embeddingModel: String? = null,
 )
 
-/** A retrieved piece of a source, best first. [score] is cosine similarity, or a keyword score. */
+/**
+ * A retrieved passage of a source, best first.
+ *
+ * @param index first chunk of the passage (0-based); [lastIndex] is the last one when neighbouring
+ *   chunks were merged into one passage.
+ * @param score cosine similarity when [byEmbedding], else keyword relevance scaled to 0..1.
+ * @param section the Markdown heading the passage sits under, if any.
+ */
 data class RetrievedChunk(
     val sourceId: String,
     val sourceName: String,
@@ -28,4 +35,9 @@ data class RetrievedChunk(
     val score: Float,
     val byEmbedding: Boolean,
     val metadata: Map<String, String>,
-)
+    val lastIndex: Int = index,
+    val section: String? = null,
+) {
+    /** Stable reference used in request traces, e.g. "notes.md#2" or "notes.md#2-3". */
+    val ref: String get() = "$sourceName#${index + 1}" + if (lastIndex > index) "-${lastIndex + 1}" else ""
+}

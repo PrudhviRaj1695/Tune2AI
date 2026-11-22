@@ -16,6 +16,9 @@ data class ContextItem(val ref: String, val text: String)
 interface ContextSource {
     val name: String
     suspend fun fetch(query: String, model: ModelDescriptor): List<ContextItem>
+
+    /** How this source's items appear in the system prompt. */
+    fun render(items: List<ContextItem>): String = "Relevant information:\n" + items.joinToString("\n") { "- ${it.text}" }
 }
 
 /**
@@ -45,10 +48,11 @@ class ContextManager(
         messages.filter { it.role == Role.SYSTEM }.forEach { systemParts += it.content }
 
         val question = messages.last().content
-        val items = sources.flatMap { source -> source.fetch(question, model).map { source.name to it } }
-        if (items.isNotEmpty()) {
-            systemParts += "Relevant information:\n" + items.joinToString("\n") { "- ${it.second.text}" }
-            items.forEach { (source, item) -> included += "$source:${item.ref}" }
+        for (source in sources) {
+            val items = source.fetch(question, model)
+            if (items.isEmpty()) continue
+            systemParts += source.render(items)
+            items.forEach { included += "${source.name}:${it.ref}" }
         }
 
         val system = systemParts.takeIf { it.isNotEmpty() }?.let { ChatMessage.system(it.joinToString("\n\n")) }

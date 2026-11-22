@@ -18,6 +18,17 @@ class KnowledgeApi internal constructor(
     /** Whether requests include retrieved knowledge. On by default. */
     @Volatile var enabled: Boolean = true
 
+    /** Most passages one request includes (1–8). More gives more context but a slower first token. */
+    @Volatile var passagesPerAnswer: Int = 3
+        set(value) { field = value.coerceIn(1, 8) }
+
+    /**
+     * Cosine floor for meaning-based matches (0.3–0.9). Raise it when unrelated passages show up;
+     * lower it when relevant ones are missed. Keyword matches have their own coverage rule.
+     */
+    @Volatile var minSimilarity: Float = RagEngine.MIN_COSINE
+        set(value) { field = value.coerceIn(0.3f, 0.9f) }
+
     /** Embedding model used for new content and search, or null when search is by keyword. */
     fun embeddingModel(): String? = engine.embeddingModel()
 
@@ -39,9 +50,15 @@ class KnowledgeApi internal constructor(
     }
 
     /** The chunks a request for [query] would include, best first. */
-    suspend fun search(query: String, limit: Int = 3): List<RetrievedChunk> {
+    suspend fun search(query: String, limit: Int = passagesPerAnswer): List<RetrievedChunk> {
         ready.await()
-        return engine.retrieve(query, limit)
+        return engine.retrieve(query, limit, minSimilarity)
+    }
+
+    /** The passage behind a reference from a request trace, e.g. "notes.md#2" (see [RetrievedChunk.ref]). */
+    suspend fun passage(ref: String): RetrievedChunk? {
+        ready.await()
+        return engine.passage(ref)
     }
 
     /** Embeds documents stored before the current embedding model was available. */
@@ -64,6 +81,8 @@ class KnowledgeApi internal constructor(
     fun sourcesBlocking(): List<KnowledgeSource> = runBlocking { sources() }
 
     fun searchBlocking(query: String, limit: Int): List<RetrievedChunk> = runBlocking { search(query, limit) }
+
+    fun passageBlocking(ref: String): RetrievedChunk? = runBlocking { passage(ref) }
 
     /** Blocking [reindex] for Java callers; [onProgress] receives (done, total). */
     fun reindexBlocking(onProgress: ProgressListener): Int = runBlocking { reindex { done, total -> onProgress.onProgress(done, total) } }

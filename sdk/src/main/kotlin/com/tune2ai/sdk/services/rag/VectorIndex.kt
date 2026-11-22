@@ -17,6 +17,7 @@ class IndexedChunk(
     val text: String,
     val vector: FloatArray?,
     val modelId: String?,
+    val section: String? = null,
 )
 
 /**
@@ -31,14 +32,14 @@ class VectorIndex(private val storage: Storage) {
     private var cache: MutableMap<String, List<IndexedChunk>>? = null
 
     @Serializable
-    private class Record(val s: String, val i: Int, val t: String, val v: String? = null, val m: String? = null)
+    private class Record(val s: String, val i: Int, val t: String, val v: String? = null, val m: String? = null, val h: String? = null)
 
     suspend fun replace(sourceId: String, chunks: List<IndexedChunk>) = lock.withLock {
         val all = loaded()
         val key = keyOf(sourceId)
         all[sourceId]?.forEach { storage.delete(CHUNKS, "$key/${it.index}") }
         chunks.forEach { c ->
-            storage.put(CHUNKS, "$key/${c.index}", json.encodeToString(Record.serializer(), Record(sourceId, c.index, c.text, c.vector?.let(::encode), c.modelId)))
+            storage.put(CHUNKS, "$key/${c.index}", json.encodeToString(Record.serializer(), Record(sourceId, c.index, c.text, c.vector?.let(::encode), c.modelId, c.section)))
         }
         if (chunks.isEmpty()) all.remove(sourceId) else all[sourceId] = chunks
     }
@@ -65,7 +66,7 @@ class VectorIndex(private val storage: Storage) {
         val bySource = HashMap<String, MutableList<IndexedChunk>>()
         storage.list(CHUNKS).values.forEach { raw ->
             val r = runCatching { json.decodeFromString(Record.serializer(), raw) }.getOrNull() ?: return@forEach
-            bySource.getOrPut(r.s) { mutableListOf() } += IndexedChunk(r.s, r.i, r.t, r.v?.let(::decode), r.m)
+            bySource.getOrPut(r.s) { mutableListOf() } += IndexedChunk(r.s, r.i, r.t, r.v?.let(::decode), r.m, r.h)
         }
         val map: MutableMap<String, List<IndexedChunk>> = HashMap()
         bySource.forEach { (id, list) -> map[id] = list.sortedBy { it.index } }

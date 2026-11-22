@@ -61,7 +61,7 @@ class Tune2AI private constructor(
     private val controller = RequestController(
         manager,
         router,
-        ContextManager(prompts, defaultTemplate, sources = listOf(RagContextSource(rag) { knowledge.enabled })),
+        ContextManager(prompts, defaultTemplate, sources = listOf(RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.enabled }))),
     )
 
     val chat = ChatApi(controller, platform.storage, scope, ready)

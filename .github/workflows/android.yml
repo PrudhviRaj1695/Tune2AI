@@ -16,6 +16,8 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      - name: Reply renderer tests
+        run: node app/src/test/js/markdown.test.js
       - name: Build and test
         run: ./gradlew :sdk:assembleRelease :sdk:testDebugUnitTest :sdk-remote:testDebugUnitTest :sdk-llama:assembleRelease :app:testDebugUnitTest :app:assembleDebug
       - name: Upload Studio APK
