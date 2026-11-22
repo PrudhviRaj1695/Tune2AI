@@ -50,10 +50,11 @@ data class ChunkingStrategy @JvmOverloads constructor(
 
     companion object {
         /**
-         * Default. Short documents (up to ~350 tokens: notes, messages, small files) are one chunk;
-         * longer ones get section-aware ~400-token parents with ~100-token children.
+         * Default. Short documents (up to ~250 tokens: notes, messages, small files) are one chunk;
+         * longer ones get section-aware ~300-token parents with ~80-token children. Parents are kept
+         * small because every passage the model reads costs time before its first word on a phone.
          */
-        @JvmField val AUTO = ChunkingStrategy("auto", ChunkingMode.ADAPTIVE, 100, 20, parentTokens = 400, wholeDocumentTokens = 350)
+        @JvmField val AUTO = ChunkingStrategy("auto", ChunkingMode.ADAPTIVE, 80, 16, parentTokens = 300, wholeDocumentTokens = 250)
 
         /** Paragraph- and sentence-aware ~200-token chunks with a sentence of overlap. */
         @JvmField val SMART = ChunkingStrategy("smart", ChunkingMode.SENTENCES, 200, 40)

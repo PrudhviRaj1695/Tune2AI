@@ -280,7 +280,7 @@ final class Connections {
                 String body = nullToEmpty(c.getString(1)).replace('\n', ' ').trim();
                 if (mentioning != null && !(who + " " + body).toLowerCase(Locale.ROOT).contains(mentioning)) continue;
                 boolean sent = c.getInt(3) == Telephony.Sms.MESSAGE_TYPE_SENT;
-                out.add("- " + fmt(WHEN, c.getLong(2)) + " · " + (sent ? "Me → " + who : who) + ": " + truncate(body, 300));
+                out.add("- " + fmt(WHEN, c.getLong(2)) + " · " + (sent ? "Me → " + who : who) + ": " + truncate(body, 160));
             }
         }
         return out;
@@ -357,7 +357,7 @@ final class Connections {
             if (!named.isEmpty() && !named.contains(n.optString("app"))) continue;
             String title = n.optString("title");
             out.add("- " + fmt(WHEN, n.optLong("time")) + " · " + n.optString("app") + " · " + (title.isEmpty() ? "" : title + ": ")
-                    + truncate(n.optString("text").replace('\n', ' '), 300));
+                    + truncate(n.optString("text").replace('\n', ' '), 160));
         }
         return out;
     }

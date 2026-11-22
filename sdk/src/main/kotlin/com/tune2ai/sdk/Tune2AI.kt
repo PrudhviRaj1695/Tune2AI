@@ -53,6 +53,7 @@ class Tune2AI private constructor(
     tools: List<Tool>,
     contextSources: List<ContextSource>,
     contextInLatestMessage: Boolean,
+    contextBudgetTokens: Int?,
 ) : AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val manager = ModelManager(backends.all, platform.storage, platform.resources, limits, scope)
@@ -75,6 +76,7 @@ class Tune2AI private constructor(
             sources = contextSources + RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.includeNeighbors }, { knowledge.enabled }),
             privacy = privacy,
             contextInLatestMessage = contextInLatestMessage,
+            contextBudgetTokens = contextBudgetTokens,
         ),
     )
 
@@ -113,6 +115,7 @@ class Tune2AI private constructor(
         private val tools = mutableListOf<Tool>()
         private val contextSources = mutableListOf<ContextSource>()
         private var contextInLatestMessage = false
+        private var contextBudgetTokens: Int? = null
 
         /** Registers a backend; fails fast on a duplicate id or missing capabilities. */
         fun addBackend(backend: InferenceBackend) = apply { backends.register(backend) }
@@ -128,6 +131,15 @@ class Tune2AI private constructor(
          * only the new message is processed. Recommended for on-device chat with long conversations.
          */
         fun contextInLatestMessage(enabled: Boolean) = apply { contextInLatestMessage = enabled }
+
+        /**
+         * Most tokens of retrieved and app context one request may carry (default: a quarter of the
+         * model's input room). Lower means a faster first token on a phone; higher, more context.
+         */
+        fun contextBudgetTokens(tokens: Int) = apply {
+            if (tokens < 64) throw Tune2AIException.InvalidRequest("A context budget below 64 tokens leaves no room for context")
+            contextBudgetTokens = tokens
+        }
 
         /**
          * Adds app-provided context (for example live data the app reads at request time). Its items
@@ -149,7 +161,7 @@ class Tune2AI private constructor(
             if (backends.all.isEmpty()) throw Tune2AIException.InvalidRequest("Add at least one inference backend with addBackend(...)")
             defaultTemplate?.let { prompts.get(it) } // fails now if the default template was never registered
             ToolCallingEngine(tools) // fails now on invalid names or schemas
-            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList(), contextSources.toList(), contextInLatestMessage)
+            return Tune2AI(platform(), backends, limits, prompts, defaultTemplate, tools.toList(), contextSources.toList(), contextInLatestMessage, contextBudgetTokens)
         }
 
         internal companion object {

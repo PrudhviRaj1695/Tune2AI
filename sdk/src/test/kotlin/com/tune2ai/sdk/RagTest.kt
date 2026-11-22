@@ -330,10 +330,20 @@ class RagTest {
         assertEquals("one passage per parent", hits.size, hits.map { it.index }.distinct().size)
     }
 
-        @Test
+    @Test
+    fun smallTalkRetrievesNothing() = runTest {
+        val rag = engine(withEmbedder = false)
+        rag.add("sms", "sms", "Hi, your OTP is 4411. Thanks, good morning!")
+        assertTrue(rag.retrieve("Hi").isEmpty())
+        assertTrue(rag.retrieve("thanks, ok").isEmpty())
+        assertTrue(rag.retrieve("what is my OTP").isNotEmpty())
+    }
+
+    @Test
     fun rechunkResplitsExistingDocumentsFromTheirOriginalText() = runTest {
         val rag = engine(withEmbedder = false)
         val text = (1..40).joinToString(" ") { "Sentence $it about apples." }
+        rag.chunking = com.tune2ai.sdk.services.rag.ChunkingStrategy.BROAD
         val before = rag.add("doc", "doc.txt", text, mapOf("kind" to "file")).chunks
         rag.chunking = com.tune2ai.sdk.services.rag.ChunkingStrategy.PRECISE
         val progress = mutableListOf<Pair<Int, Int>>()

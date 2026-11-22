@@ -8,9 +8,18 @@
 #include <atomic>
 #include <cmath>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "llama.h"
+
+namespace {
+// ponytail: all cores up to 8 for prefill; big.LITTLE-aware pinning would do better on some phones.
+int prefill_threads(int generate_threads) {
+    int cores = (int) std::thread::hardware_concurrency();
+    return std::max(generate_threads, std::min(cores, 8));
+}
+}
 
 #define TAG "Tune2AI-llama"
 
@@ -98,7 +107,9 @@ Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, 
     cparams.n_ctx = (uint32_t) n_ctx;
     cparams.n_batch = std::min<uint32_t>(512, (uint32_t) n_ctx);
     cparams.n_threads = n_threads;
-    cparams.n_threads_batch = n_threads;
+    // Reading the prompt (prefill) is compute-bound and scales with cores; generating is
+    // memory-bound and does best on the big cores alone. So prefill gets more threads.
+    cparams.n_threads_batch = prefill_threads(n_threads);
     llama_context * ctx = llama_init_from_model(model, cparams);
     if (!ctx) {
         llama_model_free(model);

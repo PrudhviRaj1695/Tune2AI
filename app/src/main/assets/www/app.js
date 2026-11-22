@@ -276,7 +276,7 @@ const PROMPT_PRESETS = {
   detailed: "You are a patient expert assistant running privately on the user's phone. It is now {{today}}.\n\nExplain step by step. Use Markdown headings for longer answers, numbered steps for procedures, tables for comparisons, and fenced code blocks for code. When passages are provided, ground the answer in them and cite like [1]. End with a one-line summary.",
 };
 const CHUNKING_INFO = {
-  auto: ["Auto (recommended)", "Small documents stay whole. Large ones split by section into parents (~400 tokens) with small children (~100): search matches a child, the model reads the whole parent."],
+  auto: ["Auto (recommended)", "Small documents stay whole. Large ones split by section into parents (~300 tokens) with small children (~80): search matches a child, the model reads the whole parent."],
   smart: ["Smart", "Paragraphs and sentences, about 200 tokens with a sentence of overlap."],
   precise: ["Precise", "Small passages (about 100 tokens) for exact facts: numbers, names, dates."],
   broad: ["Broad", "Large passages (about 380 tokens) for explanations that need context."],

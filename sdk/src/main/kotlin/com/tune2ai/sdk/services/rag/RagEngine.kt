@@ -148,6 +148,9 @@ class RagEngine(
      */
     suspend fun retrieve(query: String, limit: Int = 3, minSimilarity: Float = MIN_COSINE, neighbors: Boolean = false): List<RetrievedChunk> {
         if (query.isBlank() || limit <= 0) return emptyList()
+        // Small talk ("hi", "thanks", "ok") has nothing to look up; retrieving for it only adds
+        // unrelated passages (and the model then talks about them).
+        if (terms(query).isEmpty()) return emptyList()
         val chunks = index.all()
         if (chunks.isEmpty()) return emptyList()
         val sources = sources().associateBy { it.id }
@@ -168,7 +171,10 @@ class RagEngine(
                 embedded.forEach { cosines[key(it)] = cosine(queryVector, it.vector!!) }
             }
         }
-        val semantic = cosines.entries.filter { it.value >= minSimilarity }.sortedByDescending { it.value }.take(CANDIDATES).map { it.key }
+        // Relative cut as well as the floor: passages far weaker than the best match are noise.
+        val bestCosine = cosines.values.maxOrNull() ?: 0f
+        val floor = maxOf(minSimilarity, bestCosine - RELATIVE_COSINE_GAP)
+        val semantic = cosines.entries.filter { it.value >= floor }.sortedByDescending { it.value }.take(CANDIDATES).map { it.key }
 
         // 2. Keyword ranking. Keyword-only hits must cover enough of the question to count.
         val keywordScores = keywords.rank(query, index.bySource()) { c -> listOfNotNull(sources[c.sourceId]?.name, c.section).joinToString(" ") }
@@ -274,11 +280,17 @@ class RagEngine(
          */
         const val MIN_COSINE = 0.55f
 
+        /** Semantic hits more than this below the best match are left out. */
+        private const val RELATIVE_COSINE_GAP = 0.12f
+
         private val STOP_WORDS = setOf(
             "a", "about", "an", "and", "any", "are", "as", "at", "be", "by", "can", "could", "did", "do", "does", "for",
             "from", "had", "has", "have", "how", "i", "if", "in", "is", "it", "its", "me", "my", "of", "on", "or", "our",
             "please", "should", "so", "tell", "than", "that", "the", "their", "them", "then", "there", "these", "this",
             "to", "was", "we", "were", "what", "when", "where", "which", "who", "why", "will", "with", "would", "you", "your",
+            // small talk: nothing to look up
+            "hi", "hello", "hey", "hii", "thanks", "thank", "ok", "okay", "bye", "yes", "no", "yeah", "sure", "cool", "great",
+            "nice", "good", "morning", "evening", "night", "afternoon", "welcome", "lol", "hmm", "ya", "yep", "nope",
         )
 
         internal fun terms(text: String): List<String> =

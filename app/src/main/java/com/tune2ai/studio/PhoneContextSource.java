@@ -26,7 +26,7 @@ final class PhoneContextSource extends BlockingContextSource {
             "\\b(calendar|meetings?|events?|schedule|appointments?|agenda|today|tonight|tomorrow|week|weekend|free|busy|plans?)\\b");
     private static final Pattern NOTIFICATIONS = Pattern.compile(
             "\\b(notifications?|whatsapp|telegram|slack|gmail|e-?mails?|mails?|signal|instagram|messenger|teams|chats?)\\b");
-    private static final int LIMIT = 10;
+    private static final int LIMIT = 8;
 
     private volatile Connections connections;
 

@@ -85,6 +85,36 @@ class PromptAndContextTest {
     }
 
     @Test
+    fun contextIsCutToItsBudgetBestFirst() = runTest {
+        val passages = object : ContextSource {
+            override val name = "knowledge"
+            override suspend fun fetch(query: String, model: com.tune2ai.sdk.api.ModelDescriptor) =
+                List(5) { ContextItem("p$it", "word ".repeat(100)) }
+        }
+        // Each passage ~100 tokens + overhead: a 250-token budget keeps the two best.
+        val context = ContextManager(prompts, sources = listOf(passages), countTokens = { it.split(' ').count { w -> w.isNotBlank() } }, contextBudgetTokens = 250)
+        val result = context.assemble(listOf(ChatMessage.user("what is it")), fakeModel(), RequestOptions(maxTokens = 64))
+
+        assertEquals(listOf("knowledge:p0", "knowledge:p1"), result.included.filter { it.startsWith("knowledge:") })
+        assertEquals(listOf("knowledge:p2", "knowledge:p3", "knowledge:p4"), result.omitted)
+    }
+
+    @Test
+    fun anOversizedBestPassageIsShortenedRatherThanDropped() = runTest {
+        val big = object : ContextSource {
+            override val name = "sms"
+            override suspend fun fetch(query: String, model: com.tune2ai.sdk.api.ModelDescriptor) =
+                listOf(ContextItem("latest", "word ".repeat(2000)))
+        }
+        val words = { t: String -> t.split(' ', '\n').count { w -> w.isNotBlank() } }
+        val context = ContextManager(prompts, sources = listOf(big), countTokens = words, contextBudgetTokens = 300)
+        val result = context.assemble(listOf(ChatMessage.user("my messages")), fakeModel(), RequestOptions(maxTokens = 64))
+
+        assertEquals(listOf("sms:latest"), result.included.filter { it.startsWith("sms:") })
+        assertTrue("fits the budget", words(result.messages.first().content) <= 300)
+    }
+
+    @Test
     fun aMessageTooLargeForTheModelIsRejected() = runTest {
         val context = ContextManager(prompts, countTokens = { it.length })
         val error = assertThrows(Tune2AIException.InvalidRequest::class.java) {
