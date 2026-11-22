@@ -80,6 +80,7 @@
           </section>
         </div>
 
+        <p class="accuracy-notice" role="note">AI responses may be inaccurate. Check important information.</p>
         <form class="composer" id="composer">
           <label class="sr-only" for="prompt">Message</label>
           <textarea id="prompt" rows="1" placeholder="Message Tune2AI…" enterkeyhint="send"></textarea>
@@ -223,6 +224,11 @@
             <label><input type="radio" name="execution" value="remote" /><span><svg class="icon"><use href="#i-cloud" /></svg>Remote</span></label>
           </div>
           <p class="hint" id="execution-hint">Runs on this phone. Nothing leaves the device.</p>
+          <div id="hardware-group" hidden>
+            <p class="hint" id="hardware-now" role="status"></p>
+            <div class="segmented" id="hardware-options" role="radiogroup" aria-label="Hardware for on-device models"></div>
+            <p class="hint" id="hardware-detail"></p>
+          </div>
           <div class="card remote-form" id="remote-form" hidden>
             <label class="field"><span>API base URL</span><input id="remote-url" type="url" inputmode="url" placeholder="https://api.example.com/v1" autocomplete="off" spellcheck="false" /></label>
             <label class="field"><span>API key</span><input id="remote-key" type="password" placeholder="Kept in memory only" autocomplete="off" /></label>
@@ -370,6 +376,11 @@
     </aside>
 
     <div class="scrim" id="scrim" hidden></div>
+    <dialog class="model-unavailable-dialog" id="model-unavailable-dialog" aria-labelledby="model-unavailable-title">
+      <h2 id="model-unavailable-title">Model unavailable</h2>
+      <p id="model-unavailable-copy"></p>
+      <form method="dialog"><button class="pill-button" type="submit">Got it</button></form>
+    </dialog>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
   </body>
 </html>

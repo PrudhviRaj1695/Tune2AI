@@ -49,7 +49,7 @@ public final class MainActivity extends Activity {
         // Agent tools: look things up in sources and phone data; prepare actions the user confirms.
         for (Tool tool : agentTools.tools()) builder.addTool(tool);
         ai = builder
-                .addBackend(new LlamaBackend())
+                .addBackend(new LlamaBackend(LlamaBackend.defaultThreads(), true, getFilesDir()))
                 .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
                 // v5: asks for Markdown structure (Studio renders it) and knows the date, so questions about
                 // "today" or "next Friday" over calendar and message sources make sense.
@@ -61,7 +61,7 @@ public final class MainActivity extends Activity {
                 .contextInLatestMessage(true)
                 // Demo tools for Agent mode. Handlers run on a background thread.
                 .addTool(new Tool("device_status",
-                        "Reports this device's free memory, battery level, and thermal state.",
+                        "Reports this device's free RAM, battery level, and thermal state.",
                         args -> deviceStatus()))
                 .addTool(new Tool("list_models",
                         "Lists the AI models installed in Tune2AI Studio and whether each is loaded.",

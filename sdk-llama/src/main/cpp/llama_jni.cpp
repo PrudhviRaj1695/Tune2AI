@@ -2,15 +2,20 @@
 // One Session = one model + one context. Calls on a session are serialized by the Kotlin side.
 
 #include <jni.h>
+#include <android/api-level.h>
 #include <android/log.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include "ggml-backend.h"
+#include "gguf.h"
 #include "llama.h"
 
 namespace {
@@ -22,6 +27,8 @@ int prefill_threads(int generate_threads) {
 }
 
 #define TAG "Tune2AI-llama"
+// Returned by generate when the NPU/GPU threw; Kotlin reloads the model on CPU.
+#define ACCEL_FAILED "accelerator-failed"
 
 namespace {
 
@@ -32,7 +39,173 @@ struct Session {
     // Tokens currently in the KV cache (sequence 0, positions 0..n-1). A new prompt that starts with
     // the same tokens (chat history, agent steps) only processes what is new.
     std::vector<llama_token> cached;
+    std::string backend = "CPU"; // what the model actually runs on, for the UI and the logs
+    std::string note;            // why it is not on the requested hardware, empty when it is
+    bool accel = false;          // running on an NPU/GPU
+    bool embeddings = false;
+    bool accel_failed = false;   // the accelerator threw during decode; the Kotlin side reloads on CPU
 };
+
+// ---- Hardware selection: NPU, then GPU, then CPU --------------------------------------------------
+// Only devices that initialised on this phone are listed, so a missing or broken driver simply means
+// "no accelerator" and the model runs on CPU.
+
+struct Accel {
+    ggml_backend_dev_t dev;
+    std::string name; // shown to users, e.g. "GPU (Adreno 750, OpenCL)"
+    bool npu;
+    int rank;         // lower is tried first
+};
+
+std::vector<Accel> accelerators() {
+    std::vector<Accel> out;
+    for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
+        ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+        auto type = ggml_backend_dev_type(dev);
+        if (type != GGML_BACKEND_DEVICE_TYPE_GPU && type != GGML_BACKEND_DEVICE_TYPE_IGPU) continue;
+        const std::string api = ggml_backend_reg_name(ggml_backend_dev_backend_reg(dev));
+        const std::string desc = ggml_backend_dev_description(dev);
+        const bool npu = std::string(ggml_backend_dev_name(dev)).rfind("HTP", 0) == 0; // Qualcomm Hexagon
+        // OpenCL has llama.cpp's Adreno-tuned kernels, so it goes before Vulkan for the same GPU.
+        const int rank = npu ? 0 : api == "OpenCL" ? 1 : 2;
+        out.push_back({dev, (npu ? "NPU (" : "GPU (") + desc + ", " + api + ")", npu, rank});
+    }
+    std::stable_sort(out.begin(), out.end(), [](const Accel & a, const Accel & b) { return a.rank < b.rank; });
+    return out;
+}
+
+
+// Model formats the Adreno OpenCL kernels run correctly on the phones we have tested. Others (Q4_K_M seen on an
+// Adreno 750) make the vendor driver end the process, which cannot be caught, so they never go to OpenCL.
+// ponytail: allowlist from one device (Adreno 750); widen it as other formats are verified with GpuProbeTest.
+bool opencl_safe_format(const std::string & path) {
+    gguf_init_params params = {/*no_alloc =*/ true, /*ctx =*/ nullptr};
+    gguf_context * g = gguf_init_from_file(path.c_str(), params);
+    if (!g) return false;
+    const int64_t key = gguf_find_key(g, "general.file_type");
+    const int64_t ftype = key >= 0 ? (int64_t) gguf_get_val_u32(g, key) : -1;
+    gguf_free(g);
+    return ftype == LLAMA_FTYPE_ALL_F32 || ftype == LLAMA_FTYPE_MOSTLY_F16 ||
+           ftype == LLAMA_FTYPE_MOSTLY_Q4_0 || ftype == LLAMA_FTYPE_MOSTLY_Q8_0;
+}
+
+bool is_opencl(const Accel & a) { return a.name.find(", OpenCL)") != std::string::npos; }
+
+// A GPU driver can throw C++ exceptions (for example a shader that fails to compile). Left alone they abort the app.
+int32_t safe_process(Session * s, llama_batch_ext * batch) {
+    try {
+        return llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+    } catch (const std::exception & e) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "decode threw on %s: %s", s->backend.c_str(), e.what());
+    } catch (...) {
+        __android_log_print(ANDROID_LOG_ERROR, TAG, "decode threw on %s", s->backend.c_str());
+    }
+    s->accel_failed = s->accel;
+    return -100;
+}
+
+// Runs a short decode so driver problems show up at load time and not in the middle of a chat.
+bool warm_up(Session * s) {
+    const llama_vocab * vocab = llama_model_get_vocab(s->model);
+    llama_token tok = llama_vocab_bos(vocab);
+    if (tok < 0) tok = 0;
+    llama_batch_ext * batch = llama_batch_ext_init(s->ctx);
+    // 1 token takes the matrix-vector kernels, a long batch takes the matrix-matrix kernels.
+    const int32_t sizes[2] = {1, (int32_t) std::min<uint32_t>(llama_n_batch(s->ctx), 256)};
+    bool ok = true;
+    for (int32_t n : sizes) {
+        llama_batch_ext_clear(batch);
+        for (int32_t i = 0; i < n; ++i) {
+            const int32_t idx = llama_batch_ext_add_token(batch, 0, tok);
+            const llama_pos pos = i;
+            llama_batch_ext_set_pos(batch, idx, &pos);
+        }
+        if (s->embeddings) for (int32_t i = 0; i < n; ++i) llama_batch_ext_set_output_embd(batch, i, true);
+        else llama_batch_ext_set_output_logits(batch, n - 1, true);
+        if (safe_process(s, batch) != 0) { __android_log_print(ANDROID_LOG_ERROR, TAG, "warm-up failed at batch size %d", n); ok = false; break; }
+        llama_memory_clear(llama_get_memory(s->ctx), true);
+    }
+    llama_batch_ext_free(batch);
+    llama_memory_clear(llama_get_memory(s->ctx), true);
+    return ok;
+}
+
+// Hardware choice from the app: 0 = auto (NPU, then GPU), 1 = CPU, 2 = GPU, 3 = NPU.
+// A GPU or NPU is used only if it loads the model and passes a warm-up decode; otherwise the model runs on CPU
+// and Session::note says why. `make_cparams` builds the context parameters.
+template <typename MakeParams>
+Session * open_session(const std::string & path, int mode, MakeParams make_cparams) {
+    std::vector<const Accel *> candidates;
+    const std::vector<Accel> accels = mode == 1 ? std::vector<Accel>{} : accelerators();
+    std::string note;
+    int opencl_skipped = 0;
+    for (const Accel & a : accels) {
+        if (!(mode == 0 || (mode == 2 && !a.npu) || (mode == 3 && a.npu))) continue;
+        if (is_opencl(a) && !opencl_safe_format(path)) { ++opencl_skipped; continue; }
+        candidates.push_back(&a);
+    }
+    if (opencl_skipped) note = "The GPU supports Q4_0 and Q8_0 models; this model's format runs on the CPU";
+    if (mode == 2 && candidates.empty() && !opencl_skipped) note = "No GPU is available on this phone";
+    if (mode == 3 && candidates.empty()) note = "No NPU is available on this phone";
+    candidates.push_back(nullptr); // CPU, always last
+
+    for (const Accel * pick : candidates) {
+        const bool accel = pick != nullptr;
+        auto mparams = llama_model_default_params();
+        ggml_backend_dev_t devices[2] = {nullptr, nullptr};
+        if (accel) {
+            devices[0] = pick->dev;
+            mparams.devices = devices;
+            mparams.n_gpu_layers = -1; // everything the device can hold
+            if (const char * ngl = getenv("TUNE2AI_GPU_LAYERS")) mparams.n_gpu_layers = atoi(ngl); // diagnostics
+        } else {
+            devices[0] = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+            if (devices[0]) mparams.devices = devices;
+            mparams.n_gpu_layers = 0;
+        }
+        llama_model * model = nullptr;
+        llama_context * ctx = nullptr;
+        Session * s = nullptr;
+        std::string failure;
+        try {
+            model = llama_model_load_from_file(path.c_str(), mparams);
+            if (model) {
+                const llama_context_params cparams = make_cparams(model);
+                ctx = llama_init_from_model(model, cparams);
+                if (!ctx) failure = "could not create a context";
+                else {
+                    s = new Session();
+                    s->model = model;
+                    s->ctx = ctx;
+                    s->embeddings = cparams.embeddings;
+                    s->accel = accel;
+                    s->backend = accel ? pick->name : "CPU";
+                    if (accel && !warm_up(s)) failure = "failed its warm-up run";
+                }
+            } else {
+                failure = "could not load the model";
+            }
+        } catch (const std::exception & e) {
+            failure = std::string("threw: ") + e.what();
+        } catch (...) {
+            failure = "threw an unknown error";
+        }
+        if (s && failure.empty()) {
+            if (accel) note.clear(); // on the GPU/NPU: nothing to explain
+            s->note = note;
+            __android_log_print(ANDROID_LOG_INFO, TAG, "model running on %s%s%s", s->backend.c_str(), note.empty() ? "" : " - ", note.c_str());
+            return s;
+        }
+        // Clean up this attempt and try the next candidate.
+        if (s) { llama_free(s->ctx); llama_model_free(s->model); delete s; }
+        else { if (ctx) llama_free(ctx); if (model) llama_model_free(model); }
+        if (!accel) break;
+        __android_log_print(ANDROID_LOG_WARN, TAG, "%s %s, trying the next option", pick->name.c_str(), failure.c_str());
+        if (note.empty()) note = pick->name + " failed to start";
+    }
+    return nullptr;
+}
+
 
 Session * session(jlong handle) { return reinterpret_cast<Session *>(handle); }
 
@@ -83,7 +256,8 @@ void batch_set_tokens(llama_batch_ext * batch, const llama_token * tokens, int32
 }
 
 void log_callback(ggml_log_level level, const char * text, void *) {
-    if (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR) __android_log_print(level == GGML_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_WARN, TAG, "%s", text);
+    // Warnings and errors, plus the one-line device summary ggml-vulkan prints (kept so a phone report shows the GPU).
+    if (level == GGML_LOG_LEVEL_WARN || level == GGML_LOG_LEVEL_ERROR || strstr(text, "ggml_vulkan") != nullptr) __android_log_print(level == GGML_LOG_LEVEL_ERROR ? ANDROID_LOG_ERROR : ANDROID_LOG_WARN, TAG, "%s", text);
 }
 
 } // namespace
@@ -92,35 +266,66 @@ extern "C" {
 
 JNIEXPORT jint JNI_OnLoad(JavaVM *, void *) {
     llama_log_set(log_callback, nullptr);
+    // Backends are separate libraries (GGML_BACKEND_DL). Loading by bare name finds them in the app's own
+    // native library namespace. A backend whose vendor driver is missing just fails to load, here and only here.
+    // TUNE2AI_SKIP_BACKENDS=vulkan,opencl (environment) leaves backends out, for diagnosing a phone.
+    const char * skip_env = getenv("TUNE2AI_SKIP_BACKENDS");
+    const std::string skip = skip_env ? skip_env : "";
+    auto load = [&](const char * name, const char * lib) {
+        if (skip.find(name) != std::string::npos) return;
+        ggml_backend_load(lib);
+    };
+    if (!ggml_backend_load("libggml-cpu.so")) __android_log_print(ANDROID_LOG_ERROR, TAG, "CPU backend failed to load");
+    load("opencl", "libggml-opencl.so");
+    // The Vulkan backend needs Vulkan 1.1 entry points, which the loader has from Android 9 (API 28).
+    if (android_get_device_api_level() >= 28) load("vulkan", "libggml-vulkan.so");
+#ifdef TUNE2AI_HAS_HEXAGON
+    load("hexagon", "libggml-hexagon.so");
+#endif
     llama_backend_init();
     return JNI_VERSION_1_6;
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads) {
-    auto mparams = llama_model_default_params();
-    mparams.n_gpu_layers = 0;
-    llama_model * model = llama_model_load_from_file(str(env, path).c_str(), mparams);
-    if (!model) return 0;
-
-    auto cparams = llama_context_default_params();
-    cparams.n_ctx = (uint32_t) n_ctx;
-    cparams.n_batch = std::min<uint32_t>(512, (uint32_t) n_ctx);
-    cparams.n_threads = n_threads;
-    // Reading the prompt (prefill) is compute-bound and scales with cores; generating is
-    // memory-bound and does best on the big cores alone. So prefill gets more threads.
-    cparams.n_threads_batch = prefill_threads(n_threads);
-    llama_context * ctx = llama_init_from_model(model, cparams);
-    if (!ctx) {
-        llama_model_free(model);
-        return 0;
-    }
-    auto * s = new Session();
-    s->model = model;
-    s->ctx = ctx;
+Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads, jint hardware) {
+    Session * s = open_session(str(env, path), hardware, [&](llama_model *) {
+        auto cparams = llama_context_default_params();
+        cparams.n_ctx = (uint32_t) n_ctx;
+        cparams.n_batch = std::min<uint32_t>(512, (uint32_t) n_ctx);
+        cparams.n_threads = n_threads;
+        // Reading the prompt (prefill) is compute-bound and scales with cores; generating is
+        // memory-bound and does best on the big cores alone. So prefill gets more threads.
+        cparams.n_threads_batch = prefill_threads(n_threads);
+        return cparams;
+    });
+    if (!s) return 0;
     // Lets cancellation interrupt long prompt processing, not only the token loop.
-    llama_set_abort_callback(ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
+    llama_set_abort_callback(s->ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
     return reinterpret_cast<jlong>(s);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_backendName(JNIEnv * env, jclass, jlong handle) {
+    return env->NewStringUTF(session(handle)->backend.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_backendNote(JNIEnv * env, jclass, jlong handle) {
+    return env->NewStringUTF(session(handle)->note.c_str());
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_acceleratorFailed(JNIEnv *, jclass, jlong handle) {
+    return session(handle)->accel_failed;
+}
+
+/** Accelerators this build and phone offer, best first, e.g. ["NPU (HTP0)", "GPU (Adreno 750)"]. Empty = CPU only. */
+JNIEXPORT jobjectArray JNICALL
+Java_com_tune2ai_sdk_llama_LlamaNative_accelerators(JNIEnv * env, jclass) {
+    auto list = accelerators();
+    jobjectArray arr = env->NewObjectArray((jsize) list.size(), env->FindClass("java/lang/String"), nullptr);
+    for (size_t i = 0; i < list.size(); ++i) env->SetObjectArrayElement(arr, (jsize) i, env->NewStringUTF(list[i].name.c_str()));
+    return arr;
 }
 
 JNIEXPORT jstring JNICALL
@@ -202,9 +407,9 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
     for (int32_t i = n_keep; i < n_prompt && !error; i += n_batch) {
         const int32_t n = std::min(n_batch, n_prompt - i);
         batch_set_tokens(batch, tokens.data() + i, n, i, i + n == n_prompt);
-        const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+        const int32_t rc = safe_process(s, batch);
         if (rc == 2) { dirty = true; break; }
-        if (rc != 0) { error = "llama.cpp failed to process the prompt"; break; }
+        if (rc != 0) { error = s->accel_failed ? ACCEL_FAILED : "llama.cpp failed to process the prompt"; break; }
         s->cached.insert(s->cached.end(), tokens.begin() + i, tokens.begin() + i + n);
         if (s->cancel.load()) break;
     }
@@ -234,9 +439,9 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
         }
 
         batch_set_tokens(batch, &tok, 1, pos++, true);
-        const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+        const int32_t rc = safe_process(s, batch);
         if (rc == 2) { dirty = true; break; }
-        if (rc != 0) { error = "llama.cpp failed while generating"; break; }
+        if (rc != 0) { error = s->accel_failed ? ACCEL_FAILED : "llama.cpp failed while generating"; break; }
         s->cached.push_back(tok);
     }
     if (dirty || error) { // unknown KV state: forget the cache rather than reuse a wrong one
@@ -260,28 +465,19 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
 // Embedding models (T2AI-023): a context that outputs pooled embeddings instead of logits.
 // n_batch = n_ubatch = n_ctx, because non-causal (BERT-style) models must see a text in one ubatch.
 JNIEXPORT jlong JNICALL
-Java_com_tune2ai_sdk_llama_LlamaNative_loadEmbedder(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads) {
-    auto mparams = llama_model_default_params();
-    mparams.n_gpu_layers = 0;
-    llama_model * model = llama_model_load_from_file(str(env, path).c_str(), mparams);
-    if (!model) return 0;
-
-    auto cparams = llama_context_default_params();
-    cparams.n_ctx = (uint32_t) n_ctx;
-    cparams.n_batch = (uint32_t) n_ctx;
-    cparams.n_ubatch = (uint32_t) n_ctx;
-    cparams.n_threads = n_threads;
-    cparams.n_threads_batch = n_threads;
-    cparams.embeddings = true; // pooling type comes from the model's metadata
-    llama_context * ctx = llama_init_from_model(model, cparams);
-    if (!ctx) {
-        llama_model_free(model);
-        return 0;
-    }
-    auto * s = new Session();
-    s->model = model;
-    s->ctx = ctx;
-    llama_set_abort_callback(ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
+Java_com_tune2ai_sdk_llama_LlamaNative_loadEmbedder(JNIEnv * env, jclass, jstring path, jint n_ctx, jint n_threads, jint hardware) {
+    Session * s = open_session(str(env, path), hardware, [&](llama_model *) {
+        auto cparams = llama_context_default_params();
+        cparams.n_ctx = (uint32_t) n_ctx;
+        cparams.n_batch = (uint32_t) n_ctx;
+        cparams.n_ubatch = (uint32_t) n_ctx;
+        cparams.n_threads = n_threads;
+        cparams.n_threads_batch = n_threads;
+        cparams.embeddings = true; // pooling type comes from the model's metadata
+        return cparams;
+    });
+    if (!s) return 0;
+    llama_set_abort_callback(s->ctx, [](void * data) { return session(reinterpret_cast<jlong>(data))->cancel.load(); }, s);
     return reinterpret_cast<jlong>(s);
 }
 
@@ -310,7 +506,7 @@ Java_com_tune2ai_sdk_llama_LlamaNative_embed(JNIEnv * env, jclass, jlong handle,
         llama_batch_ext_set_pos(batch, idx, &pos);
         llama_batch_ext_set_output_embd(batch, idx, true);
     }
-    const int32_t rc = llama_process(s->ctx, LLAMA_PROCESS_TYPE_DECODE, batch);
+    const int32_t rc = safe_process(s, batch);
     llama_batch_ext_free(batch);
     if (rc != 0) {
         __android_log_print(ANDROID_LOG_WARN, TAG, "embedding failed (rc=%d, %d tokens)", rc, (int) tokens.size());

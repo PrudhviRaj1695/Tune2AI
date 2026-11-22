@@ -1,3 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- No permissions: inference runs entirely on the device. -->
-<manifest />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- GPU drivers from the phone vendor. Optional: without them the model runs on CPU.
+             Apps targeting Android 12+ must declare vendor libraries before they can load them. -->
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL-pixel.so" android:required="false" />
+    </application>
+</manifest>

@@ -1,5 +1,5 @@
 [versions]
-agp = "9.2.1"
+agp = "9.5.2"
 kotlin = "2.2.10" # must match the Kotlin Gradle plugin bundled with AGP (built-in Kotlin)
 coroutines = "1.10.2"
 serialization = "1.9.0"

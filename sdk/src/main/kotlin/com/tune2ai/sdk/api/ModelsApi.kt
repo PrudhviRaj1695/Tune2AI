@@ -86,5 +86,8 @@ class ModelsApi internal constructor(
     /** Blocking [load] for Java callers. Call from a background thread. */
     fun loadBlocking(id: String) = runBlocking { load(id) }
 
+    /** Blocking [unload] for Java callers. Call from a background thread. */
+    fun unloadBlocking(id: String) = runBlocking { unload(id) }
+
     private fun notRegistered(id: String) = ModelState.Unavailable("Model '$id' is not registered")
 }
