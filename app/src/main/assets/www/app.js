@@ -93,6 +93,7 @@ function openSheet(id) {
   title.tabIndex = -1;
   title.focus({ preventScroll: true });
   if (id === "trace") $("#trace-dot").hidden = true;
+  if (id === "setup" && device) loadDevice(); // fresh free memory and storage
 }
 
 function closeSheet(popHistory = true) {
@@ -133,6 +134,118 @@ document.addEventListener("click", (event) => {
   if (event.target.closest("[data-import]")) bridge?.importModel();
 });
 
+/* ---------- Models for this phone: specs, recommendation, downloads ----------
+   The bridge reads the phone's specs and rates each catalog model (ModelAdvisor.java). In a
+   browser preview there is no bridge, so a sample phone and a simulated download stand in. */
+const PREVIEW_DEVICE = {
+  device: { name: "Sample phone", chip: "Snapdragon 8 Gen 2", cores: 8, android: "15", totalRamBytes: 7.4e9, availableRamBytes: 3.1e9, freeStorageBytes: 52e9, supported: true },
+  models: [
+    { id: "smollm2-135m-instruct-q8_0", name: "SmolLM2 135M", sizeBytes: 144811360, blurb: "Tiny and fast. Good for testing, weak answers.", fit: "fits", reason: "Uses about 427 MB of memory.", installed: false },
+    { id: "smollm2-360m-instruct-q4_k_m", name: "SmolLM2 360M", sizeBytes: 270590880, blurb: "Small and quick on older phones.", fit: "fits", reason: "Uses about 566 MB of memory.", installed: false },
+    { id: "qwen2.5-0.5b-instruct-q4_k_m", name: "Qwen2.5 0.5B", sizeBytes: 491400032, blurb: "Smallest model that handles Agent tools.", fit: "fits", reason: "Uses about 809 MB of memory.", installed: false },
+    { id: "llama-3.2-1b-instruct-q4_k_m", name: "Llama 3.2 1B", sizeBytes: 807694464, blurb: "Balanced quality and speed.", fit: "fits", reason: "Uses about 1.2 GB of memory.", installed: false },
+    { id: "qwen2.5-1.5b-instruct-q4_k_m", name: "Qwen2.5 1.5B", sizeBytes: 1117320736, blurb: "Better answers and tool use.", fit: "fits", reason: "Uses about 1.5 GB of memory.", installed: false },
+    { id: "llama-3.2-3b-instruct-q4_k_m", name: "Llama 3.2 3B", sizeBytes: 2019377696, blurb: "Best quality here. Needs a high-end phone.", fit: "best", reason: "Largest model that runs safely on this phone. Uses about 2.5 GB of memory.", installed: true },
+  ],
+};
+let device = null;
+const downloads = {}; // id -> { received, total }
+
+const escapeHtml = (text) => String(text).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const gb = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.round(n / 1e6)} MB`);
+const bestModel = () => device?.models.find((m) => m.fit === "best") || null;
+
+function loadDevice() {
+  device = live ? JSON.parse(bridge.deviceInfo()) : PREVIEW_DEVICE;
+  device.models.forEach((m) => { if (m.downloading && !downloads[m.id]) downloads[m.id] = { received: 0, total: m.sizeBytes }; });
+  renderCatalog();
+}
+
+function renderCatalog() {
+  if (!device) return;
+  const d = device.device;
+  $("#device-summary").innerHTML = `
+    <strong>${escapeHtml(d.name)}</strong>
+    <small>${escapeHtml([d.chip, `${d.cores} cores`, `Android ${d.android}`].filter(Boolean).join(" · "))}</small>
+    <div class="spec-row">
+      <span><b>${gb(d.totalRamBytes)}</b>RAM</span>
+      <span><b>${gb(d.availableRamBytes)}</b>Free memory</span>
+      <span><b>${gb(d.freeStorageBytes)}</b>Free storage</span>
+    </div>`;
+  const busy = Object.keys(downloads).length > 0;
+  const ordered = [...device.models].sort((a, b) => (b.fit === "best") - (a.fit === "best")); // best first, then by size
+  $("#catalog").innerHTML = ordered.map((m) => {
+    const dl = downloads[m.id];
+    const ok = m.fit === "best" || m.fit === "fits";
+    let action;
+    if (m.installed) action = `<span class="model-state" data-state="loaded">Installed</span>`;
+    else if (dl) action = `<button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button>`;
+    else if (ok) action = `<button class="pill-button" type="button" data-download="${m.id}" ${busy ? "disabled" : ""}>${svgIcon("i-download")}Get</button>`;
+    else action = `<span class="model-state">${m.fit === "no-storage" ? "No space" : m.fit === "unsupported" ? "Unsupported" : "Too large"}</span>`;
+    const pct = dl ? Math.floor((dl.received / dl.total) * 100) : 0;
+    return `
+      <div class="catalog-row" data-fit="${m.fit}">
+        <div class="model-text">
+          <strong>${escapeHtml(m.name)}${m.fit === "best" ? '<span class="best-badge">Best for this phone</span>' : ""}</strong>
+          <small>${escapeHtml(dl ? `${gb(dl.received)} of ${gb(dl.total)} · ${pct}%` : `${gb(m.sizeBytes)} · ${ok ? m.blurb : m.reason}`)}</small>
+          ${dl ? `<div class="meter"><span style="width:${pct}%"></span></div>` : ""}
+        </div>
+        ${action}
+      </div>`;
+  }).join("");
+  $("#catalog-group").hidden = state.execution === "remote";
+}
+
+function startDownload(id) {
+  if (Object.keys(downloads).length) return;
+  const m = device.models.find((x) => x.id === id);
+  downloads[id] = { received: 0, total: m.sizeBytes };
+  renderCatalog();
+  renderMode();
+  if (live) bridge.downloadModel(id);
+  else previewDownload(m);
+}
+
+/* Browser preview only: pretend to download in about four seconds. */
+let previewTimer = null;
+function previewDownload(m) {
+  let received = 0;
+  previewTimer = setInterval(() => {
+    received = Math.min(m.sizeBytes, received + m.sizeBytes / 16);
+    onDownload({ id: m.id, state: received >= m.sizeBytes ? "done" : "running", received, total: m.sizeBytes });
+  }, 250);
+}
+
+function onDownload(e) {
+  if (e.state === "running") {
+    downloads[e.id] = { received: e.received, total: e.total };
+  } else {
+    delete downloads[e.id];
+    clearInterval(previewTimer);
+    if (e.state === "done") {
+      if (live) {
+        state.model = e.id;
+        loadLiveModels();
+      } else {
+        device.models.find((m) => m.id === e.id).installed = true;
+        toast(`${device.models.find((m) => m.id === e.id).name} is ready.`);
+      }
+    }
+  }
+  if (e.state !== "running" && live) loadDevice();
+  else renderCatalog();
+  renderMode();
+}
+
+document.addEventListener("click", (event) => {
+  const get = event.target.closest("[data-download]");
+  if (get) startDownload(get.dataset.download);
+  if (event.target.closest("[data-cancel-download]")) {
+    if (live) bridge.cancelDownload();
+    else Object.keys(downloads).forEach((id) => onDownload({ id, state: "cancelled" }));
+  }
+});
+
 function loadLiveModels() {
   const all = JSON.parse(bridge.listModels());
   state.remoteModel = all.find((m) => m.format === "remote") || null;
@@ -149,6 +262,7 @@ function loadLiveModels() {
   }]));
   const usable = Object.keys(MODELS).filter((k) => !MODELS[k].unavailable);
   if (!usable.includes(state.model)) state.model = usable[0] || null;
+  loadDevice(); // installed flags and the recommendation feed the empty state below
   renderModels();
   renderRuntime();
   renderMode();
@@ -203,6 +317,7 @@ function renderRuntime() {
     ? live ? remoteHint() : "Sent to the Remote API backend over HTTPS. Same route, same events."
     : "Runs on this phone. Nothing leaves the device.";
   $("#remote-form").hidden = !(live && remote);
+  $("#catalog-group").hidden = remote;
   if (live) {
     const r = JSON.parse(bridge.resources());
     const used = r.totalBytes - r.availableBytes;
@@ -246,14 +361,24 @@ bindRange($("#max-tokens"), $("#token-value"), (n) => n.toLocaleString("en-US"))
 function renderMode() {
   const mode = MODES[state.mode];
   $$('[role="tab"]').forEach((tab) => tab.setAttribute("aria-selected", String(tab.dataset.mode === state.mode)));
-  const needsModel = live && state.mode === "Chat" && Object.keys(MODELS).length === 0;
-  $("#empty-title").textContent = needsModel ? "Add a model to start." : mode.title;
+  const needsModel = live && state.mode !== "Workflow" && state.execution === "local" && Object.keys(MODELS).length === 0;
+  const best = bestModel();
+  const dlId = Object.keys(downloads)[0];
+  const dl = dlId && downloads[dlId];
+  $("#empty-title").textContent = needsModel ? (dl ? "Downloading your model…" : "Add a model to start.") : mode.title;
   $("#empty-copy").textContent = needsModel
-    ? "Import a GGUF model from this phone. It runs fully on-device; nothing is sent anywhere."
+    ? dl ? `${gb(dl.received)} of ${gb(dl.total)}. Keep Studio open; the model is ready to chat when this finishes.`
+      : best ? `${device.device.name} can safely run ${best.name}. It downloads once (${gb(best.sizeBytes)}) and then runs fully on-device.`
+        : "This phone has no room for the downloadable models. Import a small GGUF model instead."
     : live && state.mode === "Workflow" ? `${mode.copy} Workflow runs are simulated until the Workflow API ships.` : mode.copy;
   els.prompt.placeholder = mode.placeholder;
   $("#suggestions").innerHTML = needsModel
-    ? `<button class="suggestion" type="button" data-import><span>Import a .gguf model</span>${svgIcon("i-plus")}</button>`
+    ? [
+      dl ? `<div class="suggestion progress-row"><span>${Math.floor((dl.received / dl.total) * 100)}%</span><div class="meter"><span style="width:${(dl.received / dl.total) * 100}%"></span></div><button class="icon-button cancel" type="button" data-cancel-download aria-label="Cancel download">${svgIcon("i-close")}</button></div>`
+        : best ? `<button class="suggestion is-primary" type="button" data-download="${best.id}"><span>Download ${escapeHtml(best.name)} · ${gb(best.sizeBytes)}</span>${svgIcon("i-download")}</button>` : "",
+      `<button class="suggestion" type="button" data-open="setup"><span>See all models for this phone</span>${svgIcon("i-arrow-ne")}</button>`,
+      `<button class="suggestion" type="button" data-import><span>Import a .gguf file</span>${svgIcon("i-plus")}</button>`,
+    ].join("")
     : mode.suggestions.map((s) => `<button class="suggestion" type="button"><span>${s}</span>${svgIcon("i-arrow-ne")}</button>`).join("");
 }
 document.addEventListener("click", (event) => {
@@ -266,7 +391,7 @@ $$('[role="tab"]').forEach((tab) => tab.addEventListener("click", () => {
 }));
 $("#suggestions").addEventListener("click", (event) => {
   const suggestion = event.target.closest(".suggestion");
-  if (!suggestion || suggestion.hasAttribute("data-import")) return;
+  if (!suggestion || suggestion.matches("[data-import], [data-download], [data-open], .progress-row")) return;
   els.prompt.value = suggestion.textContent.trim();
   updateSend();
   els.prompt.focus();
@@ -389,6 +514,7 @@ window.tune2ai = {
   onEvent: (e) => liveListeners.get(e.id)?.(e),
   onModelsChanged: () => loadLiveModels(),
   onNotice: (text) => toast(text),
+  onDownload: (e) => onDownload(e),
 };
 
 /* ---------- Conversation ---------- */
@@ -604,6 +730,7 @@ if (live) {
   state.model = null;
   loadLiveModels();
 }
+if (!live) loadDevice();
 renderModels();
 renderRuntime();
 renderMode();

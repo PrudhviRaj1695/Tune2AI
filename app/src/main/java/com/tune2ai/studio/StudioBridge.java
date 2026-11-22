@@ -1,10 +1,14 @@
 package com.tune2ai.studio;
 
 import android.app.Activity;
+import android.app.ActivityManager;
+import android.content.Context;
 import android.content.Intent;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.provider.OpenableColumns;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 
@@ -32,12 +36,14 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The page's only door into the SDK, exposed to JavaScript as {@code window.Tune2AIBridge}.
@@ -47,7 +53,7 @@ import java.util.concurrent.Executors;
 final class StudioBridge {
     static final int IMPORT_REQUEST = 41;
     private static final String SESSION = "studio";
-    private static final int CONTEXT_LENGTH = 4096;
+    private static final int CONTEXT_LENGTH = ModelAdvisor.CONTEXT_LENGTH;
     private static final String REMOTE_MODEL_ID = "remote-model";
 
     private final Activity activity;
@@ -56,6 +62,9 @@ final class StudioBridge {
     private final RemoteSettings remote;
     private final File modelsDir;
     private final ExecutorService io = Executors.newSingleThreadExecutor();
+    private final ExecutorService downloads = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean downloadCancelled = new AtomicBoolean();
+    private volatile String downloadingId;
     private final Map<String, Cancellable> running = new ConcurrentHashMap<>();
 
     StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote) {
@@ -188,6 +197,144 @@ final class StudioBridge {
         return o.toString();
     }
 
+    /**
+     * This phone's specs and every catalog model rated for it: which is best, which fit, and why
+     * the rest do not. Read on each call, so free memory and storage are current.
+     */
+    @JavascriptInterface
+    public String deviceInfo() {
+        ActivityManager am = (ActivityManager) activity.getSystemService(Context.ACTIVITY_SERVICE);
+        ActivityManager.MemoryInfo mem = new ActivityManager.MemoryInfo();
+        am.getMemoryInfo(mem);
+        long freeStorage = activity.getFilesDir().getUsableSpace();
+        boolean supported = Arrays.asList(Build.SUPPORTED_ABIS).contains("arm64-v8a")
+                || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64");
+        java.util.Set<String> installed = new java.util.HashSet<>();
+        for (ModelInfo info : ai.getModels().listBlocking()) installed.add(info.getDescriptor().getId());
+
+        JSONObject o = new JSONObject();
+        try {
+            JSONObject d = new JSONObject();
+            d.put("name", deviceName());
+            d.put("chip", chipName());
+            d.put("cores", Runtime.getRuntime().availableProcessors());
+            d.put("android", Build.VERSION.RELEASE);
+            d.put("abi", Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "");
+            d.put("totalRamBytes", mem.totalMem);
+            d.put("availableRamBytes", mem.availMem);
+            d.put("freeStorageBytes", freeStorage);
+            d.put("supported", supported);
+            o.put("device", d);
+            JSONArray models = new JSONArray();
+            for (ModelAdvisor.Assessment a : ModelAdvisor.assess(mem.totalMem, freeStorage, supported)) {
+                JSONObject m = new JSONObject();
+                m.put("id", a.entry.id);
+                m.put("name", a.entry.name);
+                m.put("sizeBytes", a.entry.sizeBytes);
+                m.put("memoryBytes", a.entry.memoryBytes());
+                m.put("blurb", a.entry.blurb);
+                m.put("fit", a.fit.name().toLowerCase(Locale.ROOT).replace('_', '-'));
+                m.put("reason", a.reason);
+                m.put("installed", installed.contains(a.entry.id));
+                m.put("downloading", a.entry.id.equals(downloadingId));
+                models.put(m);
+            }
+            o.put("models", models);
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        return o.toString();
+    }
+
+    /**
+     * Downloads a catalog model, then registers it. One download at a time. Progress and the
+     * result arrive through {@code window.tune2ai.onDownload}.
+     */
+    @JavascriptInterface
+    public void downloadModel(String id) {
+        ModelAdvisor.Entry entry = ModelAdvisor.find(id);
+        if (entry == null) {
+            notice("Unknown model.");
+            return;
+        }
+        if (downloadingId != null) {
+            notice("Another model is downloading. Wait for it to finish or cancel it.");
+            return;
+        }
+        downloadingId = id;
+        downloadCancelled.set(false);
+        keepScreenOn(true);
+        downloads.execute(() -> runDownload(entry));
+    }
+
+    @JavascriptInterface
+    public void cancelDownload() {
+        downloadCancelled.set(true);
+    }
+
+    private void runDownload(ModelAdvisor.Entry entry) {
+        try {
+            File file = ModelDownloader.download(entry, modelsDir, downloadCancelled,
+                    (received, total) -> downloadEvent(entry.id, "running", received, total, null));
+            if (!isGguf(file)) {
+                file.delete();
+                throw new IOException("The downloaded file is not a valid GGUF model");
+            }
+            ai.getModels().registerBlocking(descriptorFor(file));
+            downloadingId = null;
+            modelsChanged();
+            downloadEvent(entry.id, "done", entry.sizeBytes, entry.sizeBytes, null);
+            notice(entry.name + " is ready.");
+        } catch (ModelDownloader.CancelledException e) {
+            downloadingId = null;
+            downloadEvent(entry.id, "cancelled", 0, entry.sizeBytes, null);
+        } catch (IOException | RuntimeException e) {
+            downloadingId = null;
+            String message = e.getMessage() == null ? "Check the connection and try again." : e.getMessage();
+            downloadEvent(entry.id, "failed", 0, entry.sizeBytes, message);
+            notice("Download failed: " + message);
+        } finally {
+            keepScreenOn(false);
+        }
+    }
+
+    private void downloadEvent(String id, String state, long received, long total, String message) {
+        JSONObject o = new JSONObject();
+        try {
+            o.put("id", id);
+            o.put("state", state);
+            o.put("received", received);
+            o.put("total", total);
+            if (message != null) o.put("message", message);
+        } catch (JSONException ignored) {
+            // values above are always valid
+        }
+        callJs("window.tune2ai && window.tune2ai.onDownload && window.tune2ai.onDownload(" + o + ")");
+    }
+
+    /** A multi-hundred-MB download stalls if the phone sleeps; keep the screen on while it runs. */
+    private void keepScreenOn(boolean on) {
+        activity.runOnUiThread(() -> {
+            if (on) activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        });
+    }
+
+    private static String deviceName() {
+        String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
+        String model = Build.MODEL == null ? "" : Build.MODEL;
+        if (model.toLowerCase(Locale.ROOT).startsWith(maker.toLowerCase(Locale.ROOT))) return model;
+        return maker.isEmpty() ? model : Character.toUpperCase(maker.charAt(0)) + maker.substring(1) + " " + model;
+    }
+
+    private static String chipName() {
+        if (Build.VERSION.SDK_INT >= 31 && Build.SOC_MODEL != null && !Build.SOC_MODEL.equals(Build.UNKNOWN)) {
+            String maker = Build.SOC_MANUFACTURER == null || Build.SOC_MANUFACTURER.equals(Build.UNKNOWN) ? "" : Build.SOC_MANUFACTURER + " ";
+            return maker + Build.SOC_MODEL;
+        }
+        return Build.HARDWARE == null ? "" : Build.HARDWARE;
+    }
+
     /** Opens the system file picker for a .gguf model. */
     @JavascriptInterface
     public void importModel() {
@@ -254,9 +401,11 @@ final class StudioBridge {
 
     private ModelDescriptor descriptorFor(File file) {
         String base = file.getName().substring(0, file.getName().length() - ".gguf".length());
+        String id = base.toLowerCase(Locale.ROOT);
+        ModelAdvisor.Entry known = ModelAdvisor.find(id); // downloaded from the catalog: use its tidy name
         return new ModelDescriptor(
-                base.toLowerCase(Locale.ROOT),
-                base.replace('-', ' ').replace('_', ' '),
+                id,
+                known != null ? known.name : base.replace('-', ' ').replace('_', ' '),
                 "gguf",
                 file.getPath(),
                 LlamaBackend.estimateMemoryBytes(file, CONTEXT_LENGTH),
@@ -352,6 +501,8 @@ final class StudioBridge {
 
     void close() {
         for (Cancellable handle : running.values()) handle.cancel();
+        downloadCancelled.set(true); // the .partial file stays and resumes next time
+        downloads.shutdownNow();
         io.shutdownNow();
     }
 }

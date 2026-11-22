@@ -28,7 +28,8 @@
       <symbol id="i-cloud" viewBox="0 0 24 24"><path d="M7 18.5a4.5 4.5 0 0 1-.7-8.95 6 6 0 0 1 11.6 1.7A3.7 3.7 0 0 1 17.3 18.5z" /></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></symbol>
       <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6.5 9.5L12 15l5.5-5.5" /></symbol>
-      <symbol id="i-tool" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></symbol>
+      <symbol id="i-tool"viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3.5 17.5l3 3 5.8-5.8a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z" /></symbol>
     </svg>
 
     <div class="app">
@@ -95,6 +96,15 @@
         <fieldset class="group">
           <legend>Model</legend>
           <div class="card model-list" id="model-list"></div>
+        </fieldset>
+
+        <fieldset class="group" id="catalog-group">
+          <legend>Models for this phone</legend>
+          <div class="card catalog">
+            <div class="device-summary" id="device-summary"></div>
+            <div id="catalog"></div>
+          </div>
+          <p class="hint">Downloads come from Hugging Face over HTTPS. After that, the model runs offline.</p>
         </fieldset>
 
         <fieldset class="group">
