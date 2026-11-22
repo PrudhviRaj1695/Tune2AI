@@ -274,6 +274,30 @@ h1, h2, h3, p { margin: 0; }
 .msg-foot { gap: 2px; margin-left: -6px; }
 .msg-foot .stats { margin-left: 6px; }
 
+/* Settings: answer style, prompt editor, chunking */
+.answer-style { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.answer-style .range-label { margin-bottom: 8px; }
+.answer-style .hint { margin-top: 6px; }
+.prompt-editor { display: grid; gap: 10px; }
+.prompt-editor textarea {
+  min-height: 150px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; resize: vertical;
+  background: var(--surface-2); color: var(--ink); font: 13.5px/1.5 var(--mono);
+}
+.prompt-editor textarea:focus { outline: none; border-color: var(--ink-3); }
+.prompt-editor .hint { margin: 0; }
+.preset-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.preset { min-height: 30px; padding: 0 12px; border: 1px solid var(--line); border-radius: 99px; background: var(--surface); color: var(--ink-2); font-size: 12.5px; font-weight: 600; }
+.preset.is-on { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+.chunking { display: grid; gap: 8px; }
+.choice-list { display: grid; gap: 6px; }
+.choice { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.choice input { margin: 3px 0 0; accent-color: var(--ink); }
+.choice strong { display: block; font-size: 13.5px; font-weight: 600; }
+.choice small { display: block; color: var(--ink-3); font-size: 12px; }
+.choice.is-on { border-color: var(--ink); }
+.apply-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: var(--warn-soft); }
+.apply-row small { flex: 1; color: var(--ink-2); font-size: 12px; }
+
 /* Agent actions: prepared by the agent, run only when the user taps */
 .action-card {
   display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;

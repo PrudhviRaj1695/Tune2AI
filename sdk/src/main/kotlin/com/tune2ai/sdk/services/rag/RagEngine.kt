@@ -35,10 +35,13 @@ import kotlin.math.ln
 class RagEngine(
     private val storage: Storage,
     private val embeddings: EmbeddingService?,
-    private val chunker: Chunker = Chunker(),
+    chunker: Chunker = Chunker(),
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val index = VectorIndex(storage)
+
+    /** How new documents are split. [rechunk] applies a change to existing ones. */
+    @Volatile var chunking: ChunkingStrategy = chunker.strategy
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Embedding model new content is indexed with, or null when retrieval uses keywords. */
@@ -46,17 +49,42 @@ class RagEngine(
 
     suspend fun add(id: String, name: String, text: String, metadata: Map<String, String> = emptyMap()): KnowledgeSource {
         if (id.isBlank()) throw Tune2AIException.InvalidRequest("A knowledge source needs an id")
-        val pieces = chunker.pieces(text)
+        val strategy = chunking
+        val pieces = Chunker(strategy).pieces(text)
         val chunks = pieces.mapIndexed { i, p -> IndexedChunk(id, i, p.text, null, null, p.section) }
         val (vectors, modelId) = embed(name, chunks)
         index.replace(id, chunks.mapIndexed { i, c -> c.withVector(vectors?.get(i), modelId) })
-        val source = KnowledgeSource(id, name, metadata, pieces.size, text.length, clock(), modelId)
+        // The original text is kept so a different chunking strategy can re-split it later.
+        storage.put(TEXTS, VectorIndex.keyOf(id), text.take(MAX_STORED_TEXT))
+        val source = KnowledgeSource(id, name, metadata + (CHUNKING_KEY to strategy.id), pieces.size, text.length, clock(), modelId)
         storage.put(SOURCES, VectorIndex.keyOf(id), json.encodeToString(KnowledgeSource.serializer(), source))
         return source
     }
 
+    /**
+     * Re-splits every document whose chunks were made with another strategy than [chunking] (and
+     * re-embeds them). Documents indexed before original text was kept are rebuilt from their chunks.
+     * Returns how many were re-split. [onProgress] gets (done, total).
+     */
+    suspend fun rechunk(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        val target = chunking.id
+        val stale = sources().filter { (it.metadata[CHUNKING_KEY] ?: ChunkingStrategy.SMART.id) != target }
+        stale.forEachIndexed { n, source ->
+            val text = storage.get(TEXTS, VectorIndex.keyOf(source.id))
+                ?: index.chunksOf(source.id).takeIf { it.isNotEmpty() }?.let { chunks -> mergeTexts(chunks.map { it.text }) }
+            if (text != null) {
+                val kept = add(source.id, source.name, text, source.metadata - CHUNKING_KEY)
+                // Keep the original "added" time so the Sources list order does not change.
+                storage.put(SOURCES, VectorIndex.keyOf(source.id), json.encodeToString(KnowledgeSource.serializer(), kept.copy(addedAtMillis = source.addedAtMillis)))
+            }
+            onProgress(n + 1, stale.size)
+        }
+        return stale.size
+    }
+
     suspend fun delete(id: String): Boolean {
         val removed = index.remove(id)
+        storage.delete(TEXTS, VectorIndex.keyOf(id))
         return storage.delete(SOURCES, VectorIndex.keyOf(id)) || removed
     }
 
@@ -67,6 +95,7 @@ class RagEngine(
     suspend fun clear() {
         index.clear()
         storage.clear(SOURCES)
+        storage.clear(TEXTS)
     }
 
     /**
@@ -103,7 +132,7 @@ class RagEngine(
      * relevant enough. [minSimilarity] is the cosine floor for semantic matches: raise it for
      * stricter retrieval, lower it to retrieve more loosely related passages.
      */
-    suspend fun retrieve(query: String, limit: Int = 3, minSimilarity: Float = MIN_COSINE): List<RetrievedChunk> {
+    suspend fun retrieve(query: String, limit: Int = 3, minSimilarity: Float = MIN_COSINE, neighbors: Boolean = false): List<RetrievedChunk> {
         if (query.isBlank() || limit <= 0) return emptyList()
         val chunks = index.all()
         if (chunks.isEmpty()) return emptyList()
@@ -145,7 +174,13 @@ class RagEngine(
         val picked = ranked.filter { c ->
             val n = perSource.getOrDefault(c.sourceId, 0)
             (!manySources || n < MAX_PER_SOURCE).also { if (it) perSource[c.sourceId] = n + 1 }
-        }.take(limit)
+        }.take(limit).let { top ->
+            if (!neighbors) top
+            // Neighbour expansion: add the chunk before and after each hit, so the model sees the
+            // sentences around a match (a table's header, the start of a list, the end of a story).
+            else top + top.flatMap { c -> listOf(c.index - 1, c.index + 1).mapNotNull { byKey["${c.sourceId}\u0000$it"] } }
+                .filter { n -> top.none { it === n } }.distinct()
+        }
 
         // Merge neighbouring chunks of one document into a single passage, keeping rank order.
         val scoreOf = { c: IndexedChunk ->
@@ -220,6 +255,9 @@ class RagEngine(
 
     companion object {
         const val SOURCES = "rag.sources"
+        const val TEXTS = "rag.texts"
+        const val CHUNKING_KEY = "chunking"
+        private const val MAX_STORED_TEXT = 400_000 // under Android's 2 MB SQLite row limit even at 3 bytes a character
         private const val EMBED_BATCH = 16
         private const val CANDIDATES = 20
         private const val RRF_K = 60f
@@ -302,6 +340,7 @@ class RagContextSource(
     private val engine: RagEngine,
     private val limit: () -> Int = { 3 },
     private val minSimilarity: () -> Float = { RagEngine.MIN_COSINE },
+    private val neighbors: () -> Boolean = { false },
     private val enabled: () -> Boolean = { true },
 ) : ContextSource {
     override val name = "rag"
@@ -310,7 +349,7 @@ class RagContextSource(
         if (!enabled()) return emptyList()
         // Knowledge is an enhancement: if retrieval fails, the request goes ahead without it.
         val hits = try {
-            engine.retrieve(query, limit(), minSimilarity())
+            engine.retrieve(query, limit(), minSimilarity(), neighbors())
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

@@ -6,6 +6,7 @@ import android.provider.AlarmClock;
 import android.provider.CalendarContract;
 
 import com.tune2ai.sdk.api.KnowledgeApi;
+import com.tune2ai.sdk.api.PrivacyApi;
 import com.tune2ai.sdk.api.RetrievedChunk;
 import com.tune2ai.sdk.api.Tool;
 
@@ -39,7 +40,14 @@ final class AgentTools {
     private volatile KnowledgeApi knowledge;
 
     /** Called once the SDK is built; until then the data tools report that nothing is connected. */
-    void attach(Connections connections, KnowledgeApi knowledge) {
+    private volatile PrivacyApi privacy;
+
+    /** Tools that read personal data: not offered when a remote model runs the agent (privacy guard). */
+    static final Set<String> PERSONAL = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            "search_sources", "read_messages", "calendar_events", "find_contact", "recent_calls", "read_notifications")));
+
+    void attach(Connections connections, KnowledgeApi knowledge, PrivacyApi privacy) {
+        this.privacy = privacy;
         this.connections = connections;
         this.knowledge = knowledge;
     }
@@ -76,7 +84,7 @@ final class AgentTools {
         t.add(new Tool("send_sms",
                 "Prepares a text message for the user to review and send. Use a phone number or a contact name.",
                 schema(prop("to", "string", "Phone number or contact name"), prop("text", "string", "Message text"), required("to", "text")),
-                10_000, h(args -> ready(new JSONObject(args), "A Review in Messages button is shown; the user sends it."))));
+                10_000, h(args -> ready(guarded(new JSONObject(args), "text"), "A Review in Messages button is shown; the user sends it."))));
         t.add(new Tool("add_calendar_event",
                 "Prepares a calendar event for the user to confirm. Times are local, like 2026-11-27 07:40.",
                 schema(prop("title", "string", "Event title"), prop("start", "string", "Start, YYYY-MM-DD HH:MM"),
@@ -99,7 +107,7 @@ final class AgentTools {
                 10_000, h(args -> ready(new JSONObject(args), "A Call button is shown; the user starts the call."))));
         t.add(new Tool("share", "Prepares text to share through another app, such as email or WhatsApp.",
                 schema(prop("text", "string", "Text to share"), prop("subject", "string", "Optional subject"), required("text")),
-                10_000, h(args -> ready(new JSONObject(args), "A Share button is shown; the user picks the app."))));
+                10_000, h(args -> ready(guarded(new JSONObject(args), "text", "subject"), "A Share button is shown; the user picks the app."))));
         return t;
     }
 
@@ -182,6 +190,7 @@ final class AgentTools {
     Intent intentFor(String tool, JSONObject a) throws JSONException, ParseException {
         switch (tool) {
             case "send_sms":
+                guarded(a, "text");
                 return new Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(resolveNumber(a.getString("to")))))
                         .putExtra("sms_body", a.getString("text"));
             case "call":
@@ -205,6 +214,7 @@ final class AgentTools {
                         .putExtra(AlarmClock.EXTRA_SKIP_UI, false); // the Clock app shows it for confirmation
             }
             case "share": {
+                guarded(a, "text", "subject");
                 Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, a.getString("text"));
                 if (a.has("subject")) send.putExtra(Intent.EXTRA_SUBJECT, a.getString("subject"));
                 return Intent.createChooser(send, "Share with");
@@ -243,6 +253,25 @@ final class AgentTools {
         int min = Integer.parseInt(m.group(2));
         if (h > 23 || min > 59) throw new ParseException("Not a time of day: " + text, 0);
         return new int[] {h, min};
+    }
+
+    /**
+     * Privacy guard for outgoing text: refuses to prepare a message or share that contains a one-time
+     * code, card or account number, ID, password, or key, so a prompt-injected or confused agent
+     * cannot send them out (the user can still copy and send such text themselves).
+     */
+    private JSONObject guarded(JSONObject a, String... fields) {
+        PrivacyApi p = privacy;
+        if (p == null) return a;
+        java.util.Set<String> kinds = new java.util.TreeSet<>();
+        for (String f : fields) {
+            for (com.tune2ai.sdk.services.guard.SensitiveKind k : p.find(a.optString(f))) kinds.add(k.getLabel());
+        }
+        if (!kinds.isEmpty()) {
+            throw new SecurityException("Blocked by the privacy guard: the text contains a " + String.join(", ", kinds)
+                    + ". Do not send it; tell the user to share it themselves if they really mean to.");
+        }
+        return a;
     }
 
     private static String ready(JSONObject args, String note) throws JSONException {

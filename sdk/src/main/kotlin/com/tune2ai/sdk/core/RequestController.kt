@@ -33,10 +33,14 @@ data class AssembledContext(
 
 /** Builds the model input. Implemented by the Context Manager (T2AI-022). */
 fun interface ContextAssembler {
-    suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions): AssembledContext
+    /** @param remote true when the request runs on a backend that sends data off the device. */
+    suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions, remote: Boolean): AssembledContext
+
+    suspend fun assemble(messages: List<ChatMessage>, model: ModelDescriptor, options: RequestOptions): AssembledContext =
+        assemble(messages, model, options, remote = false)
 
     companion object {
-        val PassThrough = ContextAssembler { messages, _, _ -> AssembledContext(messages, "Message only") }
+        val PassThrough = ContextAssembler { messages, _, _, _ -> AssembledContext(messages, "Message only") }
     }
 }
 
@@ -70,7 +74,7 @@ class RequestController(
             }
             emit(Progress(requestId, Stage.ROUTED, "${route.backend.id} · ${route.model.name}"))
 
-            val assembled = context.assemble(messages, route.model, options)
+            val assembled = context.assemble(messages, route.model, options, remote = route.backend.capabilities.requiresNetwork)
             emit(Progress(requestId, Stage.CONTEXT_ASSEMBLED, assembled.summary, assembled.included + assembled.omitted.map { "omitted $it" }))
 
             models.acquire(route.model, route.backend).use { lease ->

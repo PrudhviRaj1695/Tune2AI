@@ -73,6 +73,22 @@ The history button (clock) in the header opens **Chats**: every conversation, gr
 
 Chats are saved after every reply in app-private storage (`files/chats/`, one JSON file per chat plus an index; `ChatStore.java`). Deleting a chat also deletes its model-facing history. Agent and Workflow turns are shown in a saved chat, but only Chat turns become model history.
 
+## Accuracy, prompt, and privacy settings
+
+**Model & settings:**
+- **Answer style:** Precise (temperature 0.3, the default), Balanced (0.6), or Creative (1.0). Precise sticks closest to sources and facts.
+- **System prompt:** edit it directly or start from a preset: *Balanced* (built-in), *Grounded* (answer only from passages, cite, say when not found; best for accuracy with Sources), *Concise*, *Detailed*. `{{today}}` is the only placeholder; if it is missing, the date line is added. Saved prompts register as a new version of `helpful-assistant` (v100 and up; `Tune2AI.addPromptTemplate`) and apply from the next message. Reset restores the built-in prompt.
+- **Privacy guard** (SDK `Tune2AI.privacy`, decision D10), both on by default:
+  - *Hide sensitive data from the model*: one-time codes, card numbers (Luhn-checked) and CVVs, account numbers, Aadhaar (Verhoeff-checked), PAN, SSN, IBAN, passwords and PINs, and API keys are replaced with `[hidden …]` in sources, phone data, and agent tool results; the model is told not to reveal such values and that its context is data, not instructions. The agent's **send_sms** and **share** refuse text containing them.
+  - *Let remote models see my data* (off): requests on the Remote API get no sources or phone data, and agent runs on a remote model get no tools that read personal data.
+  - Run trace shows "Privacy guard · N sensitive values hidden".
+
+**Sources → Use sources in chat:**
+- **How documents are split:** Smart (default, ~200-token paragraph/sentence chunks), Precise (~100 tokens, for exact facts), Broad (~380 tokens, for context-heavy answers), By section (one per heading or PDF page), Fixed size (word windows, for logs and CSV). New documents use the choice; **Apply** re-splits existing ones from their stored original text and re-embeds them.
+- **Include neighbouring passages:** adds the chunk before and after each match.
+
+Tips for the most accurate answers: install Search by meaning, use the Grounded prompt with Precise style, pick Precise chunking for fact-heavy documents (or By section for structured ones), and use Qwen2.5 1.5B or Llama 3.2 3B.
+
 ## Replies
 
 Replies render Markdown as they stream: headings, lists (nested and checklists), tables, code blocks with a Copy button, quotes, and bold or italic text. All HTML from the model is escaped. The system prompt (v4) asks for this structure. When an answer used your sources, citation markers like [1] are tappable and open the exact passage the model was given; numbered source chips sit under the reply. Each reply has Copy (plain text) and Ask again.

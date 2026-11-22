@@ -1,5 +1,6 @@
 package com.tune2ai.sdk.api
 
+import com.tune2ai.sdk.services.rag.ChunkingStrategy
 import com.tune2ai.sdk.services.rag.RagEngine
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.runBlocking
@@ -29,6 +30,14 @@ class KnowledgeApi internal constructor(
     @Volatile var minSimilarity: Float = RagEngine.MIN_COSINE
         set(value) { field = value.coerceIn(0.3f, 0.9f) }
 
+    /** Adds the passage before and after each match, for more surrounding context. Off by default. */
+    @Volatile var includeNeighbors: Boolean = false
+
+    /** How new documents are split into passages; [rechunk] applies a change to existing ones. */
+    var chunking: ChunkingStrategy
+        get() = engine.chunking
+        set(value) { engine.chunking = value }
+
     /** Embedding model used for new content and search, or null when search is by keyword. */
     fun embeddingModel(): String? = engine.embeddingModel()
 
@@ -52,7 +61,7 @@ class KnowledgeApi internal constructor(
     /** The chunks a request for [query] would include, best first. */
     suspend fun search(query: String, limit: Int = passagesPerAnswer): List<RetrievedChunk> {
         ready.await()
-        return engine.retrieve(query, limit, minSimilarity)
+        return engine.retrieve(query, limit, minSimilarity, includeNeighbors)
     }
 
     /** The passage behind a reference from a request trace, e.g. "notes.md#2" (see [RetrievedChunk.ref]). */
@@ -66,6 +75,15 @@ class KnowledgeApi internal constructor(
         ready.await()
         return engine.reindex(onProgress)
     }
+
+    /** Re-splits documents made with another [chunking] strategy. Returns how many changed. */
+    suspend fun rechunk(onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        ready.await()
+        return engine.rechunk(onProgress)
+    }
+
+    /** Blocking [rechunk] for Java callers; [onProgress] receives (done, total). */
+    fun rechunkBlocking(onProgress: ProgressListener): Int = runBlocking { rechunk { done, total -> onProgress.onProgress(done, total) } }
 
     suspend fun clear() {
         ready.await()

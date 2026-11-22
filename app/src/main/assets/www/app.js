@@ -267,6 +267,95 @@ function showView(view) {
 }
 $$(".view-tabs [role=tab]").forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 
+/* ---------- Settings: answer style, system prompt, privacy guard, chunking ---------- */
+const DEFAULT_PROMPT = "You are a helpful assistant running privately on the user's phone. It is now {{today}}. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, **bold** for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.";
+const PROMPT_PRESETS = {
+  balanced: DEFAULT_PROMPT,
+  grounded: "You are a careful assistant running privately on the user's phone. It is now {{today}}.\n\nWhen passages or phone data are provided, answer only from them and cite each passage you use like [1]. If they do not contain the answer, say you could not find it in their data instead of guessing. Copy names, numbers, amounts, and dates exactly as written. Use a short Markdown list when there are several items.",
+  concise: "You are a helpful assistant running privately on the user's phone. It is now {{today}}.\n\nAnswer in at most three sentences or a short bullet list. No preamble and no closing offers. Use provided passages when relevant and cite them like [1]. Say so briefly when you are not sure.",
+  detailed: "You are a patient expert assistant running privately on the user's phone. It is now {{today}}.\n\nExplain step by step. Use Markdown headings for longer answers, numbered steps for procedures, tables for comparisons, and fenced code blocks for code. When passages are provided, ground the answer in them and cite like [1]. End with a one-line summary.",
+};
+const CHUNKING_INFO = {
+  smart: ["Smart (recommended)", "Paragraphs and sentences, about 200 tokens with a sentence of overlap."],
+  precise: ["Precise", "Small passages (about 100 tokens) for exact facts: numbers, names, dates."],
+  broad: ["Broad", "Large passages (about 380 tokens) for explanations that need context."],
+  sections: ["By section", "One passage per heading or PDF page. Best for structured notes and manuals."],
+  fixed: ["Fixed size", "Equal word windows that ignore sentences. Good for logs and CSV."],
+};
+let settings = null;
+
+function loadSettings() {
+  settings = live ? JSON.parse(bridge.settings())
+    : settings || { prompt: DEFAULT_PROMPT, defaultPrompt: DEFAULT_PROMPT, customPrompt: false, promptVersion: 5, redact: true, remoteContext: false, chunking: "smart", neighbors: false };
+  $("#system-prompt").value = settings.prompt;
+  markPreset();
+  $("#guard-redact").checked = settings.redact;
+  $("#guard-remote").checked = settings.remoteContext;
+  $("#prompt-hint").textContent = `${settings.customPrompt ? `Your prompt (v${settings.promptVersion})` : "Built-in prompt"}. Use {{today}} for the current date and time. Changes apply from your next message.`;
+}
+
+function markPreset() {
+  const text = $("#system-prompt").value.trim();
+  $$("[data-prompt-preset]").forEach((b) => b.classList.toggle("is-on", PROMPT_PRESETS[b.dataset.promptPreset].trim() === text));
+}
+
+function saveSystemPrompt(text) {
+  const error = live ? bridge.setSystemPrompt(text) : (/\{\{\s*(?!today\b)\w+\s*\}\}/.test(text) ? "Only {{today}} can be used as a placeholder." : "");
+  if (error) return toast(error);
+  if (!live) Object.assign(settings, { prompt: text.trim() || DEFAULT_PROMPT, customPrompt: !!text.trim() && text.trim() !== DEFAULT_PROMPT, promptVersion: settings.promptVersion < 100 ? 100 : settings.promptVersion + 1 });
+  loadSettings();
+  renderRuntime();
+  toast(text.trim() ? "Prompt saved. It applies from your next message." : "Built-in prompt restored.");
+}
+
+$("#system-prompt").addEventListener("input", markPreset);
+document.addEventListener("click", (event) => {
+  const preset = event.target.closest("[data-prompt-preset]")?.dataset.promptPreset;
+  if (preset) { $("#system-prompt").value = PROMPT_PRESETS[preset]; markPreset(); }
+  if (event.target.closest("[data-prompt-save]")) saveSystemPrompt($("#system-prompt").value);
+  if (event.target.closest("[data-prompt-reset]")) saveSystemPrompt("");
+  if (event.target.closest("[data-rechunk]")) {
+    if (live) bridge.rechunkKnowledge();
+    else { knowledge.staleChunks = 0; renderKnowledge(); toast("Documents re-split."); }
+  }
+});
+$$('input[name="answer-style"]').forEach((r) => r.addEventListener("change", () => {
+  $("#temperature").value = r.value;
+  $("#temperature").dispatchEvent(new Event("input"));
+}));
+$("#temperature").addEventListener("input", () => {
+  const t = Number($("#temperature").value);
+  $$('input[name="answer-style"]').forEach((r) => { r.checked = Math.abs(Number(r.value) - t) < 0.05; });
+});
+["#guard-redact", "#guard-remote"].forEach((id) => $(id).addEventListener("change", () => {
+  settings.redact = $("#guard-redact").checked;
+  settings.remoteContext = $("#guard-remote").checked;
+  bridge?.setPrivacy(settings.redact, settings.remoteContext);
+  if (!settings.redact) toast("Sensitive values will now reach the model. Turn the guard back on when you are done.");
+}));
+
+function renderChunking(k) {
+  const current = k.chunking || "smart";
+  $("#chunking-list").innerHTML = Object.entries(CHUNKING_INFO).map(([id, [name, about]]) => `
+    <label class="choice${id === current ? " is-on" : ""}">
+      <input type="radio" name="chunking" value="${id}" ${id === current ? "checked" : ""} />
+      <span><strong>${name}</strong><small>${about}</small></span>
+    </label>`).join("");
+  $("#neighbors-switch").checked = !!k.neighbors;
+  const stale = k.staleChunks || 0;
+  $("#chunking-apply").hidden = !stale || !!k.indexing;
+  $("#chunking-apply-text").textContent = `${stale} document${stale === 1 ? " was" : "s were"} split another way. Apply re-splits ${stale === 1 ? "it" : "them"} (and re-embeds), which can take a while.`;
+}
+
+function saveChunking() {
+  const id = $('input[name="chunking"]:checked')?.value || "smart";
+  const neighbors = $("#neighbors-switch").checked;
+  if (live) bridge.setChunking(id, neighbors);
+  else { Object.assign(knowledge, { chunking: id, neighbors, staleChunks: id === "smart" ? 0 : knowledge.sources.length }); renderKnowledge(); }
+}
+$("#chunking-list").addEventListener("change", saveChunking);
+$("#neighbors-switch").addEventListener("change", saveChunking);
+
 /* ---------- Connections: phone data (storage, messages, calendar, contacts, apps) as context ----------
    Each connection is read by StudioBridge/Connections.java and indexed into the same knowledge index
    as Sources, so chat retrieves from it the same way. */
@@ -389,6 +478,9 @@ document.addEventListener("click", (event) => {
    In a browser preview there is no bridge; a sample index stands in. */
 const PREVIEW_KNOWLEDGE = {
   enabled: true,
+  chunking: "smart",
+  neighbors: false,
+  staleChunks: 0,
   passagesPerAnswer: 3,
   minSimilarity: 0.55,
   embeddingModel: null,
@@ -429,6 +521,7 @@ function renderKnowledge() {
   const strict = STRICTNESS.reduce((best, v) => (Math.abs(v - floor) < Math.abs(best - floor) ? v : best));
   $$('input[name="strictness"]').forEach((r) => { r.checked = Number(r.value) === strict; });
   $("#strictness-hint").textContent = STRICTNESS_HINT[strict];
+  renderChunking(k);
   $("#sources-summary").textContent = k.sources.length
     ? `${k.sources.length} document${k.sources.length === 1 ? "" : "s"} · ${chunks} passages · ${k.embeddingModel ? "search by meaning" : "keyword search"}`
     : "Connect a folder, files, or a note below.";
@@ -592,7 +685,7 @@ function loadLiveModels() {
 
 function contextItems() {
   return [
-    { label: "Prompt v5", detail: "Helpful assistant v5 (with today's date)" },
+    { label: `Prompt v${settings?.promptVersion ?? 5}`, detail: `Helpful assistant v${settings?.promptVersion ?? 5}${settings?.customPrompt ? " (your prompt)" : ""}` },
     live && { label: "History", detail: "Conversation history (trimmed to fit)" },
     !live && state.memory && { label: "Memory", detail: "Session memory · 2 items" },
     knowledge?.enabled && knowledge.sources.length && { label: "Sources", detail: `Your sources · best ${knowledge.embeddingModel ? "matches" : "keyword matches"}, up to 3` },
@@ -621,8 +714,10 @@ $("#remote-save").addEventListener("click", () => {
 function describeSource(source) {
   const omitted = source.startsWith("omitted ");
   const [kind, value = ""] = source.replace(/^omitted /, "").split(/:(.*)/s);
+  if (omitted && kind === "guard") return `Privacy guard · ${value}`;
   if (omitted) return `Trimmed · ${value}`;
   if (kind === "prompt") return `Prompt ${value.replace("@", " v")}`;
+  if (kind === "guard") return `Privacy guard · ${value}`;
   if (kind === "rag") return `Source · ${value.replace(/#([\d-]+)$/, ", passage $1")}`;
   return `${kind[0].toUpperCase()}${kind.slice(1)} · ${value}`;
 }
@@ -1439,6 +1534,7 @@ if (live) {
   loadLiveModels();
 }
 if (!live) loadDevice();
+loadSettings();
 loadKnowledge();
 loadConnections();
 if (live && bridge.takeOpenSources()) showView("sources");

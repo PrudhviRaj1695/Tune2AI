@@ -122,6 +122,18 @@
                 </div>
                 <p class="hint" id="strictness-hint">Balanced suits most documents.</p>
               </div>
+              <div class="chunking">
+                <span class="range-label">How documents are split</span>
+                <div class="choice-list" id="chunking-list" role="radiogroup" aria-label="Chunking strategy"></div>
+                <div class="apply-row" id="chunking-apply" hidden>
+                  <small id="chunking-apply-text"></small>
+                  <button class="pill-button" type="button" data-rechunk>Apply</button>
+                </div>
+              </div>
+              <label class="switch-row">
+                <span><strong>Include neighbouring passages</strong><small>Adds the passage before and after each match, for answers that need surrounding context.</small></span>
+                <input type="checkbox" role="switch" id="neighbors-switch" />
+              </label>
             </div>
           </div>
 
@@ -236,9 +248,18 @@
         <fieldset class="group">
           <legend>Generation</legend>
           <div class="card">
+            <div class="answer-style">
+              <span class="range-label">Answer style</span>
+              <div class="segmented three" role="radiogroup" aria-label="Answer style">
+                <label><input type="radio" name="answer-style" value="0.3" checked /><span>Precise</span></label>
+                <label><input type="radio" name="answer-style" value="0.6" /><span>Balanced</span></label>
+                <label><input type="radio" name="answer-style" value="1" /><span>Creative</span></label>
+              </div>
+              <p class="hint">Precise sticks closest to your sources and facts. Creative suits brainstorming and writing.</p>
+            </div>
             <label class="range">
-              <span class="range-label">Temperature <output id="temperature-value">0.7</output></span>
-              <input id="temperature" type="range" min="0" max="1.5" step="0.1" value="0.7" />
+              <span class="range-label">Temperature <output id="temperature-value">0.3</output></span>
+              <input id="temperature" type="range" min="0" max="1.5" step="0.1" value="0.3" />
               <span class="range-ends" aria-hidden="true"><span>Precise</span><span>Creative</span></span>
             </label>
             <label class="range">
@@ -250,7 +271,34 @@
 
         <fieldset class="group">
           <legend>System prompt</legend>
-          <div class="card prompt-card">You are a helpful assistant running privately on the user's phone. It is now <i>today's date and time</i>. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, <b>bold</b> for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.</div>
+          <div class="card prompt-editor">
+            <div class="preset-row" role="group" aria-label="Prompt presets">
+              <button type="button" class="preset" data-prompt-preset="balanced">Balanced</button>
+              <button type="button" class="preset" data-prompt-preset="grounded">Grounded</button>
+              <button type="button" class="preset" data-prompt-preset="concise">Concise</button>
+              <button type="button" class="preset" data-prompt-preset="detailed">Detailed</button>
+            </div>
+            <textarea id="system-prompt" rows="7" spellcheck="false" aria-label="System prompt"></textarea>
+            <p class="hint" id="prompt-hint">Use {{today}} for the current date and time. Changes apply from your next message.</p>
+            <div class="form-actions">
+              <button class="button" type="button" data-prompt-reset>Reset</button>
+              <button class="pill-button" type="button" data-prompt-save>Save prompt</button>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset class="group">
+          <legend>Privacy guard</legend>
+          <div class="card">
+            <label class="switch-row">
+              <span><strong>Hide sensitive data from the model</strong><small>One-time codes, card and account numbers, Aadhaar, PAN, and other IDs, passwords, and keys are replaced before any model sees them, and the agent cannot put them in a text or share.</small></span>
+              <input type="checkbox" role="switch" id="guard-redact" checked />
+            </label>
+            <label class="switch-row">
+              <span><strong>Let remote models see my data</strong><small>Off: when you use a remote model, your sources, messages, calendar, and other phone data stay on the phone; only what you type is sent.</small></span>
+              <input type="checkbox" role="switch" id="guard-remote" />
+            </label>
+          </div>
         </fieldset>
 
         <fieldset class="group">

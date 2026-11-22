@@ -89,7 +89,8 @@ final class StudioBridge {
         this.connections = new Connections(activity, ai.getKnowledge(), connector);
         phone.attach(connections);
         this.agentTools = agentTools;
-        agentTools.attach(connections, ai.getKnowledge());
+        agentTools.attach(connections, ai.getKnowledge(), ai.getPrivacy());
+        restoreSettings();
         indexer.execute(this::syncDueConnections);
         android.content.SharedPreferences prefs = activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE);
         ai.getKnowledge().setEnabled(prefs.getBoolean("enabled", true));
@@ -114,12 +115,129 @@ final class StudioBridge {
                     Collections.singletonMap("today", MainActivity.today()));
             String prompt = req.getString("prompt");
             Cancellable handle = "Agent".equals(req.optString("mode"))
-                    ? ai.getAgent().stream(prompt, null, new AgentLimits(8, 6), options, event -> deliver(id, event))
+                    ? ai.getAgent().stream(prompt, agentToolsFor(req), new AgentLimits(8, 6), options, event -> deliver(id, event))
                     : ai.getChat().session(sessionOf(req)).stream(prompt, options, event -> deliver(id, event));
             running.put(id, handle);
         } catch (JSONException e) {
             notice("Could not read the request: " + e.getMessage());
         }
+    }
+
+    /** All tools, or (privacy guard) none that read personal data when a remote model runs the agent. */
+    private java.util.Set<String> agentToolsFor(JSONObject req) {
+        boolean remoteRun = "remote".equals(req.optString("backend"));
+        if (!remoteRun || ai.getPrivacy().getPersonalContextWithRemote()) return null;
+        java.util.Set<String> allowed = new java.util.HashSet<>();
+        for (com.tune2ai.sdk.api.Tool t : agentTools.tools()) if (!AgentTools.PERSONAL.contains(t.getName())) allowed.add(t.getName());
+        allowed.add("current_time");
+        allowed.add("device_status");
+        allowed.add("list_models");
+        return allowed;
+    }
+
+    // ---------- Settings: system prompt, privacy guard, chunking ----------
+
+    private static final String PROMPT_ID = "helpful-assistant";
+    private static final int FIRST_CUSTOM_VERSION = 100; // above the built-in versions
+
+    private android.content.SharedPreferences settingsPrefs() {
+        return activity.getSharedPreferences("studio-settings", Activity.MODE_PRIVATE);
+    }
+
+    /** Applies saved settings to the SDK at startup. */
+    private void restoreSettings() {
+        android.content.SharedPreferences p = settingsPrefs();
+        ai.getPrivacy().setRedactSensitive(p.getBoolean("redact", true));
+        ai.getPrivacy().setPersonalContextWithRemote(p.getBoolean("remoteContext", false));
+        ai.getKnowledge().setChunking(com.tune2ai.sdk.services.rag.ChunkingStrategy.of(p.getString("chunking", "smart")));
+        ai.getKnowledge().setIncludeNeighbors(p.getBoolean("neighbors", false));
+        String prompt = p.getString("prompt", null);
+        if (prompt != null) registerPrompt(prompt, p.getInt("promptVersion", FIRST_CUSTOM_VERSION));
+    }
+
+    /** Everything the settings controls show. */
+    @JavascriptInterface
+    public String settings() {
+        android.content.SharedPreferences p = settingsPrefs();
+        try {
+            JSONArray strategies = new JSONArray();
+            for (com.tune2ai.sdk.services.rag.ChunkingStrategy s : com.tune2ai.sdk.services.rag.ChunkingStrategy.ALL) {
+                strategies.put(new JSONObject().put("id", s.getId()).put("window", s.getWindowTokens()).put("overlap", s.getOverlapTokens())
+                        .put("mode", s.getMode().name()));
+            }
+            return new JSONObject()
+                    .put("prompt", p.getString("prompt", MainActivity.SYSTEM_PROMPT))
+                    .put("defaultPrompt", MainActivity.SYSTEM_PROMPT)
+                    .put("customPrompt", p.contains("prompt"))
+                    .put("promptVersion", p.contains("prompt") ? p.getInt("promptVersion", FIRST_CUSTOM_VERSION) : 5)
+                    .put("redact", ai.getPrivacy().getRedactSensitive())
+                    .put("remoteContext", ai.getPrivacy().getPersonalContextWithRemote())
+                    .put("chunking", ai.getKnowledge().getChunking().getId())
+                    .put("neighbors", ai.getKnowledge().getIncludeNeighbors())
+                    .put("strategies", strategies)
+                    .toString();
+        } catch (JSONException e) {
+            return "{}";
+        }
+    }
+
+    /**
+     * Saves a new system prompt and uses it from the next message. Returns "" on success or an error.
+     * The only placeholder allowed is {{today}}; if it is missing, the date line is added so answers
+     * about "today" keep working. An empty text restores the built-in prompt.
+     */
+    @JavascriptInterface
+    public String setSystemPrompt(String text) {
+        String t = text == null ? "" : text.trim();
+        android.content.SharedPreferences p = settingsPrefs();
+        int version = p.getInt("promptVersion", FIRST_CUSTOM_VERSION - 1) + 1;
+        if (t.isEmpty()) {
+            registerPrompt(MainActivity.SYSTEM_PROMPT, version);
+            p.edit().remove("prompt").putInt("promptVersion", version).apply();
+            return "";
+        }
+        if (t.length() > 4_000) return "Keep the prompt under 4,000 characters; long prompts leave less room for your sources.";
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{\\{\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*\\}\\}").matcher(t);
+        while (m.find()) {
+            if (!"today".equals(m.group(1))) return "Only {{today}} can be used as a placeholder; remove {{" + m.group(1) + "}}.";
+        }
+        if (!t.contains("{{today}}") && !t.contains("{{ today }}")) t = t + "\n\nIt is now {{today}}.";
+        try {
+            registerPrompt(t, version);
+        } catch (RuntimeException e) {
+            return "That prompt could not be used: " + e.getMessage();
+        }
+        p.edit().putString("prompt", t).putInt("promptVersion", version).apply();
+        return "";
+    }
+
+    private void registerPrompt(String text, int version) {
+        ai.addPromptTemplate(new com.tune2ai.sdk.services.prompt.PromptTemplate(PROMPT_ID, version, text, Collections.singleton("today")));
+    }
+
+    @JavascriptInterface
+    public void setPrivacy(boolean redact, boolean remoteContext) {
+        ai.getPrivacy().setRedactSensitive(redact);
+        ai.getPrivacy().setPersonalContextWithRemote(remoteContext);
+        settingsPrefs().edit().putBoolean("redact", redact).putBoolean("remoteContext", remoteContext).apply();
+    }
+
+    /** Chunking strategy for new documents, and neighbour expansion. "Apply" re-splits existing ones. */
+    @JavascriptInterface
+    public void setChunking(String id, boolean neighbors) {
+        ai.getKnowledge().setChunking(com.tune2ai.sdk.services.rag.ChunkingStrategy.of(id));
+        ai.getKnowledge().setIncludeNeighbors(neighbors);
+        settingsPrefs().edit().putString("chunking", id).putBoolean("neighbors", neighbors).apply();
+        knowledgeChanged();
+    }
+
+    @JavascriptInterface
+    public void rechunkKnowledge() {
+        runIndexing("Re-splitting documents", p -> {
+            KnowledgeConnector.Summary s = new KnowledgeConnector.Summary();
+            s.added = ai.getKnowledge().rechunkBlocking((done, total) -> p.update(done, total, ""));
+            return s;
+        });
     }
 
     /** Each saved chat has its own SDK session (model-facing history) with the same id. */
@@ -188,6 +306,8 @@ final class StudioBridge {
             });
         } catch (JSONException | java.text.ParseException e) {
             notice("Could not prepare that action: " + e.getMessage());
+        } catch (SecurityException e) {
+            notice(e.getMessage()); // privacy guard refused it
         }
     }
 
@@ -440,6 +560,15 @@ final class StudioBridge {
             o.put("enabled", ai.getKnowledge().getEnabled());
             o.put("passagesPerAnswer", ai.getKnowledge().getPassagesPerAnswer());
             o.put("minSimilarity", ai.getKnowledge().getMinSimilarity());
+            String chunking = ai.getKnowledge().getChunking().getId();
+            o.put("chunking", chunking);
+            o.put("neighbors", ai.getKnowledge().getIncludeNeighbors());
+            int stale = 0;
+            for (com.tune2ai.sdk.api.KnowledgeSource src : ai.getKnowledge().sourcesBlocking()) {
+                String used = src.getMetadata().get("chunking");
+                if (!chunking.equals(used == null ? "smart" : used)) stale++;
+            }
+            o.put("staleChunks", stale);
             String model = ai.getKnowledge().embeddingModel();
             o.put("embeddingModel", model == null ? JSONObject.NULL : model);
             JSONObject embedder = new JSONObject();

@@ -28,6 +28,8 @@ class AgentEngine(
     private val controller: RequestController,
     private val tools: ToolCallingEngine,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** Hides sensitive values in tool results before the model (and the app's UI) sees them. */
+    private val redact: (String) -> String = { it },
 ) {
     fun run(
         task: String,
@@ -103,9 +105,10 @@ class AgentEngine(
                         val callId = "call_$toolCalls"
                         emit(Tune2AIEvent.ToolCall(requestId, callId, parsed.name, parsed.argumentsJson))
                         val outcome = tools.invoke(parsed.name, parsed.argumentsJson, allowed)
-                        emit(Tune2AIEvent.ToolResult(requestId, callId, parsed.name, outcome.resultJson, outcome.isError))
+                        val result = redact(outcome.resultJson)
+                        emit(Tune2AIEvent.ToolResult(requestId, callId, parsed.name, result, outcome.isError))
                         messages += ChatMessage.assistant(text.toString().trim())
-                        messages += ChatMessage.user("Tool result for ${parsed.name}: ${outcome.resultJson}")
+                        messages += ChatMessage.user("Tool result for ${parsed.name}: $result")
                     }
                 }
             }

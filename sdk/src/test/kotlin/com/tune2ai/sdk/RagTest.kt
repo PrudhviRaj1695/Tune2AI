@@ -256,6 +256,49 @@ class RagTest {
     }
 
     @Test
+    fun chunkingStrategiesShapeChunks() {
+        val doc = "# Intro\n\nShort intro.\n\n# Details\n\n" + (1..40).joinToString(" ") { "Fact number $it is here." }
+        val smart = com.tune2ai.sdk.services.rag.Chunker(com.tune2ai.sdk.services.rag.ChunkingStrategy.SMART).pieces(doc)
+        val precise = com.tune2ai.sdk.services.rag.Chunker(com.tune2ai.sdk.services.rag.ChunkingStrategy.PRECISE).pieces(doc)
+        val broad = com.tune2ai.sdk.services.rag.Chunker(com.tune2ai.sdk.services.rag.ChunkingStrategy.BROAD).pieces(doc)
+        val sections = com.tune2ai.sdk.services.rag.Chunker(com.tune2ai.sdk.services.rag.ChunkingStrategy.SECTIONS).pieces(doc)
+        val fixed = com.tune2ai.sdk.services.rag.Chunker(com.tune2ai.sdk.services.rag.ChunkingStrategy.FIXED).pieces(doc)
+        assertTrue(precise.size > smart.size && smart.size > broad.size)
+        assertEquals("sections splits at every heading", "Intro", sections.first().section)
+        assertTrue(sections.first().text.contains("Short intro") && !sections.first().text.contains("Fact number"))
+        assertTrue(fixed.all { it.text.length <= 800 })
+        assertEquals("Details", fixed.last().section)
+        assertEquals(com.tune2ai.sdk.services.rag.ChunkingStrategy.SMART, com.tune2ai.sdk.services.rag.ChunkingStrategy.of("nope"))
+    }
+
+    @Test
+    fun rechunkResplitsExistingDocumentsFromTheirOriginalText() = runTest {
+        val rag = engine(withEmbedder = false)
+        val text = (1..40).joinToString(" ") { "Sentence $it about apples." }
+        val before = rag.add("doc", "doc.txt", text, mapOf("kind" to "file")).chunks
+        rag.chunking = com.tune2ai.sdk.services.rag.ChunkingStrategy.PRECISE
+        val progress = mutableListOf<Pair<Int, Int>>()
+        assertEquals(1, rag.rechunk { d, t -> progress += d to t })
+        val after = rag.sources().single()
+        assertTrue(after.chunks > before)
+        assertEquals("file", after.metadata["kind"])
+        assertEquals("precise", after.metadata["chunking"])
+        assertEquals(listOf(1 to 1), progress)
+        assertEquals(0, rag.rechunk())
+        assertTrue(rag.retrieve("sentence 33 apples").isNotEmpty())
+    }
+
+    @Test
+    fun neighbourExpansionAddsSurroundingPassages() = runTest {
+        val rag = RagEngine(InMemoryStorage(), null, Chunker(windowTokens = 15, overlapTokens = 0))
+        rag.add("story", "story.txt", "The vault is on level two. Its door is painted blue. The key hangs behind the reception desk. Visitors sign in first.")
+        val plain = rag.retrieve("where does the key hang", limit = 1)
+        val wide = rag.retrieve("where does the key hang", limit = 1, neighbors = true)
+        assertTrue(wide.single().text.length > plain.single().text.length)
+        assertTrue(wide.single().lastIndex > wide.single().index)
+    }
+
+        @Test
     fun retrievalFailureLeavesTheRequestWithoutKnowledge() = runTest {
         val broken = object : com.tune2ai.sdk.core.Storage by InMemoryStorage() {
             override suspend fun list(namespace: String): Map<String, String> = throw com.tune2ai.sdk.api.Tune2AIException.StorageFailure("disk gone")

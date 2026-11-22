@@ -64,3 +64,22 @@ class ContextSourceTest {
         }
     }
 }
+
+/** Prompts registered while the app runs (a user-edited system prompt). */
+class RuntimePromptTest {
+    @Test
+    fun aNewerVersionBecomesTheDefault() = runBlocking {
+        val modelFile = File.createTempFile("tiny", ".fake").apply { deleteOnExit() }
+        val backend = FakeBackend()
+        Tune2AI.Builder.forTests(FakePlatform()).addBackend(backend)
+            .addPromptTemplate(PromptTemplate("assistant", 1, "Be concise."))
+            .defaultPromptTemplate("assistant")
+            .build().use { ai ->
+                ai.models.register(fakeModel(path = modelFile.path))
+                ai.addPromptTemplate(PromptTemplate("assistant", 2, "Answer only from the passages."))
+                val events = ai.chat.send("Hi").toList()
+                assertTrue(backend.lastRequest!!.messages.first().content.startsWith("Answer only from the passages."))
+                assertTrue(events.filterIsInstance<Tune2AIEvent.Progress>().single { it.stage == Tune2AIEvent.Stage.CONTEXT_ASSEMBLED }.sources.contains("prompt:assistant@2"))
+            }
+    }
+}

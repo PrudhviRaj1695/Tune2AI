@@ -36,6 +36,21 @@ public class AgentToolsTest {
     }
 
     @Test
+    public void privacyGuardBlocksSendingCodesOut() throws Exception {
+        AgentTools guarded = new AgentTools();
+        guarded.attach(null, null, new com.tune2ai.sdk.api.PrivacyApi(new com.tune2ai.sdk.services.guard.PrivacyGuard()));
+        Tool sms = null;
+        for (Tool t : guarded.tools()) if (t.getName().equals("send_sms")) sms = t;
+        try {
+            sms.getHandler().call("{\"to\":\"+15550100\",\"text\":\"Your OTP is 482913\"}");
+            fail("expected the guard to block it");
+        } catch (SecurityException expected) {
+            assertTrue(expected.getMessage().contains("one-time code"));
+        }
+        assertEquals("ready_for_user", new JSONObject(sms.getHandler().call("{\"to\":\"Mom\",\"text\":\"Running late\"}")).getString("status"));
+    }
+
+    @Test
     public void badTimesAreRejectedSoTheModelCanFixThem() {
         try {
             tools.get("set_alarm").getHandler().call("{\"time\":\"25:00\"}");

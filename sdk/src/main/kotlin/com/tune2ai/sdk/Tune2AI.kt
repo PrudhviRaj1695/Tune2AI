@@ -5,6 +5,7 @@ import com.tune2ai.sdk.api.AgentApi
 import com.tune2ai.sdk.api.BackendInfo
 import com.tune2ai.sdk.api.ChatApi
 import com.tune2ai.sdk.api.KnowledgeApi
+import com.tune2ai.sdk.api.PrivacyApi
 import com.tune2ai.sdk.api.ModelsApi
 import com.tune2ai.sdk.api.ResourceLimits
 import com.tune2ai.sdk.api.ResourceSnapshot
@@ -21,6 +22,7 @@ import com.tune2ai.sdk.platform.android.AndroidPlatform
 import com.tune2ai.sdk.services.context.ContextManager
 import com.tune2ai.sdk.services.context.ContextSource
 import com.tune2ai.sdk.services.embedding.EmbeddingService
+import com.tune2ai.sdk.services.guard.PrivacyGuard
 import com.tune2ai.sdk.services.model.ModelManager
 import com.tune2ai.sdk.services.prompt.PromptManager
 import com.tune2ai.sdk.services.prompt.PromptTemplate
@@ -46,7 +48,7 @@ class Tune2AI private constructor(
     private val platform: Platform,
     private val backends: BackendRegistry,
     limits: ResourceLimits,
-    prompts: PromptManager,
+    private val prompts: PromptManager,
     defaultTemplate: String?,
     tools: List<Tool>,
     contextSources: List<ContextSource>,
@@ -57,6 +59,9 @@ class Tune2AI private constructor(
     private val router = Router(manager)
     private val rag = RagEngine(platform.storage, EmbeddingService(manager, router))
 
+    /** Guardrails for personal data: redaction and keeping personal context off remote models. */
+    val privacy = PrivacyApi(PrivacyGuard())
+
     /** On-device knowledge (RAG): add documents; requests then include the relevant parts. */
     val knowledge = KnowledgeApi(rag, ready)
 
@@ -66,16 +71,23 @@ class Tune2AI private constructor(
         ContextManager(
             prompts,
             defaultTemplate,
-            sources = contextSources + RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.enabled }),
+            sources = contextSources + RagContextSource(rag, { knowledge.passagesPerAnswer }, { knowledge.minSimilarity }, { knowledge.includeNeighbors }, { knowledge.enabled }),
+            privacy = privacy,
         ),
     )
 
     val chat = ChatApi(controller, platform.storage, scope, ready)
-    val agent = AgentApi(AgentEngine(controller, ToolCallingEngine(tools)), scope, ready)
+    val agent = AgentApi(AgentEngine(controller, ToolCallingEngine(tools), redact = { privacy.apply(it).text }), scope, ready)
     val models = ModelsApi(manager, scope, ready)
 
     /** Registered backends and whether each can run right now. */
     fun backends(): List<BackendInfo> = backends.describe()
+
+    /**
+     * Registers a prompt template while the app runs, for example a user-edited system prompt. A
+     * higher version of an existing id becomes that id's default for later requests.
+     */
+    fun addPromptTemplate(template: PromptTemplate) = prompts.register(template)
 
     /** Latest device memory, battery, and thermal reading. */
     fun resources(): ResourceSnapshot = platform.resources.snapshot.value

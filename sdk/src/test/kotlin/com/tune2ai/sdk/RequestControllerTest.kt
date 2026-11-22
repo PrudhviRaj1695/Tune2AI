@@ -126,7 +126,7 @@ class RequestControllerTest {
     @Test
     fun contextAssemblerShapesTheModelInput() = runTest {
         val backend = FakeBackend()
-        val (controller, _) = controller(backend, context = { messages, _, _ ->
+        val (controller, _) = controller(backend, context = { messages, _, _, _ ->
             AssembledContext(listOf(ChatMessage.system("Be brief.")) + messages, "Prompt v3")
         })
         val events = controller.chat(hello).toList()
