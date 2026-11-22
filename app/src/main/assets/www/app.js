@@ -1,7 +1,6 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const svgIcon = (id) => `<svg class="icon" aria-hidden="true"><use href="#${id}" /></svg>`;
-const wide = matchMedia("(min-width: 1200px)");
 const finePointer = matchMedia("(pointer: fine)");
 
 let MODELS = {
@@ -29,8 +28,8 @@ const formatBytes = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.ro
 
 const MODES = {
   Chat: {
-    title: "Ask anything. Watch the whole route.",
-    copy: "Every request runs the path your app will: API, controller, router, context, inference.",
+    title: "Ask anything.",
+    copy: "Private by design. Every request runs through the same path your app will use.",
     placeholder: "Message Tune2AI…",
     suggestions: ["How does on-device inference protect user data?", "Draft a release note for our chat feature", "Compare 3B and 8B models on a mid-range phone"],
     reply: (c) => c.remote
@@ -38,20 +37,29 @@ const MODES = {
       : `Prompts and outputs never leave this phone: ${c.backend} runs ${c.model} locally, so there is no server to log data and replies keep working offline.\n\nThe trade-off is device headroom. The Model Manager checks free memory before loading, and the Device Resource Monitor can unload idle models under pressure so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
   },
   Agent: {
-    title: "Give an agent a task. See every tool call.",
+    title: "Give an agent a task.",
     copy: "Agents run bounded steps with tools your app registers, and stop at the limits you set.",
     placeholder: "Describe a task for the agent…",
     suggestions: ["How much free memory does this device have?", "Which models are installed, and is one loaded?", "Check device headroom before loading a second model"],
     reply: () => `Done in 3 of 6 allowed steps.\n\n1 · resource_monitor → 3.6 GB free, thermal nominal\n2 · list_models → 1 loaded, 1 ready\n3 · Drafted the plan below\n\nLoading a second model fits now, but unload it when the app goes to the background. Every tool input was validated against its schema before it ran.`,
   },
   Workflow: {
-    title: "Chain model and tool steps into one run.",
+    title: "Chain steps into one run.",
     copy: "Workflows checkpoint after each step, so a run can resume after the app restarts.",
     placeholder: "Describe the workflow input…",
     suggestions: ["Summarize → classify → draft a reply to a support ticket", "Translate, check tone, then shorten", "Extract action items from meeting notes"],
     reply: () => `Workflow finished: 3 of 3 steps.\n\nSummarize → 2 sentences\nClassify → "billing question"\nDraft reply → 86 words, friendly tone\n\nEach step was checkpointed to local storage, so this run could resume after an app restart without repeating completed steps.`,
   },
+  /* Finance is a Chat preset: same Chat API, finance-focused starters. Figures stay on the device. */
+  Finance: {
+    title: "Your money, on-device.",
+    copy: "Ask about budgets, spending, and plans. Nothing you type leaves this phone.",
+    placeholder: "Ask about budgets or spending…",
+    suggestions: ["Build a monthly budget from a ₹60,000 salary", "Explain the 50/30/20 rule with an example", "Split savings between an emergency fund and investments"],
+    reply: (c) => `A simple starting point is 50/30/20: half of take-home pay for needs, 30% for wants, and 20% for savings and debt.\n\nOn ₹60,000 that is ₹30,000 for rent, food, and bills, ₹18,000 for everything else, and ₹12,000 saved. Build an emergency fund of three to six months of needs first, then invest the rest.\n\nThis ran on ${c.model}, so your figures never left the phone.`,
+  },
 };
+const apiName = (mode) => (mode === "Finance" ? "Chat" : mode);
 
 const state = { mode: "Chat", execution: "local", model: "llama", memory: true, rag: false, run: null, hasRun: false, sources: null };
 const els = {
@@ -83,7 +91,6 @@ let openSheetId = null;
 let sheetOpener = null;
 
 function openSheet(id) {
-  if (wide.matches) return;
   if (openSheetId) closeSheet(false);
   openSheetId = id;
   sheetOpener = document.activeElement;
@@ -115,19 +122,19 @@ document.addEventListener("click", (event) => {
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape") closeSheet();
 });
-wide.addEventListener("change", () => closeSheet());
 
 /* ---------- Setup ---------- */
 function renderModels() {
   const empty = live && Object.keys(MODELS).length === 0
     ? `<p class="hint">No models yet. Import a GGUF file, for example SmolLM2 or Qwen2.5 Instruct.</p>` : "";
-  const importButton = live ? `<button class="import-model" type="button" data-import>${svgIcon("i-plus")}Import a .gguf model</button>` : "";
+  const importButton = live ? `<div class="button-row"><button class="button" type="button" data-import>${svgIcon("i-plus")}Import a .gguf model</button></div>` : "";
   $("#model-list").innerHTML = empty + Object.entries(MODELS).map(([key, m]) => `
     <label class="model-option">
       <input type="radio" name="model" value="${key}" ${key === state.model ? "checked" : ""} ${m.unavailable ? "disabled" : ""} />
       <span class="mono-tile" aria-hidden="true">${m.mono}</span>
       <span class="model-text"><strong>${m.name}</strong><small>${m.backend} · ${m.size}${m.unavailable ? ` · ${m.unavailable}` : ""}</small></span>
       <span class="model-state" data-state="${(m.state || "").toLowerCase()}">${m.unavailable ? "Unavailable" : m.state}</span>
+      <span class="radio-mark" aria-hidden="true">${svgIcon("i-check")}</span>
     </label>`).join("") + importButton;
 }
 
@@ -199,9 +206,8 @@ function renderRuntime() {
   const chip = $("#model-chip");
   $("#model-chip-label").textContent = model.short;
   chip.toggleAttribute("data-remote", remote);
-  $(".model-chip-kind use", chip).setAttribute("href", remote ? "#i-cloud" : "#i-chip");
-  chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change run setup`);
-  $("#rail-backend").textContent = remote ? "Remote API" : `${model.backend} · Android`;
+  chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change model and settings`);
+  $("#runtime-label").textContent = remote ? "Remote · HTTPS" : "On-device · Private";
   $("#execution-hint").textContent = remote
     ? live ? remoteHint() : "Sent to the Remote API backend over HTTPS. Same route, same events."
     : "Runs on this phone. Nothing leaves the device.";
@@ -220,7 +226,6 @@ function renderRuntime() {
   $("#included-list").innerHTML = state.sources
     ? state.sources.map((s) => `<li>${svgIcon("i-check")}${describeSource(s)}</li>`).join("")
     : items.map((i) => `<li>${svgIcon("i-check")}${i.detail}</li>`).join("");
-  $("#context-pills").innerHTML = items.map((i) => `<button class="chip" type="button" data-open="setup">${i.label}</button>`).join("");
 }
 
 $$('input[name="execution"]').forEach((input) => input.addEventListener("change", () => {
@@ -257,8 +262,8 @@ function renderMode() {
     : live && state.mode === "Workflow" ? `${mode.copy} Workflow runs are simulated until the Workflow API ships.` : mode.copy;
   els.prompt.placeholder = mode.placeholder;
   $("#suggestions").innerHTML = needsModel
-    ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
-    : mode.suggestions.map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
+    ? `<button class="suggestion" type="button" data-import><span>Import a .gguf model</span>${svgIcon("i-plus")}</button>`
+    : mode.suggestions.map((s) => `<button class="suggestion" type="button"><span>${s}</span>${svgIcon("i-arrow-ne")}</button>`).join("");
 }
 document.addEventListener("click", (event) => {
   const link = event.target.closest("[data-goto]");
@@ -277,14 +282,12 @@ $("#suggestions").addEventListener("click", (event) => {
 });
 
 /* ---------- Trace ---------- */
-const ROUTE_LABELS = ["API", "Controller", "Router", "Context", "Inference"];
-
 function routeSteps() {
   const model = currentModel();
   const remote = state.execution === "remote";
   const context = contextItems().map((i) => i.label).join(" + ");
   return [
-    { name: `${state.mode} API`, detail: "Request received" },
+    { name: `${apiName(state.mode)} API`, detail: "Request received" },
     { name: "Request Controller", detail: `Validated · deadline ${live ? 120 : 30} s` },
     { name: "Model & Task Router", detail: remote ? `Remote API · ${model.short}` : `${model.backend} · ${model.short}` },
     { name: "Context Manager", detail: context },
@@ -379,7 +382,7 @@ function liveSource(prompt, emit) {
   bridge.send(JSON.stringify({
     id,
     prompt,
-    mode: state.mode,
+    mode: apiName(state.mode),
     model: state.execution === "remote" ? state.remoteModel?.id ?? null : state.model || null,
     backend: state.execution === "remote" ? "remote" : null,
     temperature: Number($("#temperature").value),
@@ -421,13 +424,12 @@ function addAssistantMessage(simulated) {
   msg.className = "msg";
   msg.innerHTML = `
     <div class="msg-head">
-      <svg class="avatar" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="url(#brand-gradient)" /><path d="M6 17c2 0 2-6 4-6s2 10 4 10 2-13 4-13 2 9 4 9 2-4 4-4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      <strong>Tune2AI</strong><span>${state.execution === "remote" ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
+      <span class="dot" aria-hidden="true"></span><strong></strong><span>${state.execution === "remote" ? "Remote" : "On-device"}</span>${simulated && live ? '<span class="chip">Simulated</span>' : ""}
     </div>
-    <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l, i) => `${i ? '<span class="route-link"></span>' : ""}<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
     <div class="tools"></div>
     <div class="answer is-streaming"><p></p></div>
     <div class="msg-foot"></div>`;
+  $(".msg-head strong", msg).textContent = model.short;
   els.conversation.append(msg);
   return msg;
 }
@@ -450,7 +452,7 @@ function addToolCard(msg, e) {
   card.className = "tool-card";
   card.dataset.call = e.callId;
   card.dataset.state = "running";
-  card.innerHTML = `<summary>${svgIcon("i-bot")}<span>Called <strong></strong></span><span class="tool-state">Running…</span></summary><pre></pre>`;
+  card.innerHTML = `<summary>${svgIcon("i-tool")}<span>Called <strong></strong></span><span class="tool-state">Running…</span></summary><pre></pre>`;
   $("strong", card).textContent = e.name;
   $("pre", card).textContent = prettyJson(e.arguments);
   $(".tools", msg).append(card);
@@ -472,7 +474,6 @@ function run(text) {
   els.empty.hidden = true;
   addUserMessage(text);
   const msg = addAssistantMessage(simulated);
-  const routeEls = $$(".route-step", msg);
   const answer = $(".answer", msg);
   const steps = routeSteps();
   const model = currentModel();
@@ -492,7 +493,6 @@ function run(text) {
   const items = $$("li", els.timeline);
   const onEvent = (event) => stickToBottom(() => {
     if (event.type === "step") {
-      routeEls.forEach((el, i) => { el.dataset.state = i < event.index ? "done" : i === event.index ? "active" : "idle"; });
       items.forEach((li, i) => { li.dataset.state = i < event.index ? "done" : i === event.index ? "active" : "idle"; });
       if (event.index > 0) $(".step-time", items[event.index - 1]).textContent = `${event.ms} ms`;
       if (event.detail) $(".step-text small", items[event.index]).textContent = event.detail;
@@ -522,14 +522,12 @@ function run(text) {
     answer.classList.remove("is-streaming");
     const foot = $(".msg-foot", msg);
     if (result === "ok") {
-      routeEls.forEach((el) => { el.dataset.state = "done"; });
       items.forEach((li) => { li.dataset.state = "done"; });
       $(".step-time", items[4]).textContent = `${stats.totalMs} ms`;
       setStatus("ok", "Completed");
       setMetrics(`${((firstMs ?? 0) / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
-      foot.innerHTML = `<button class="chip chip-stats" type="button" data-open="trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s · ${remote ? "Remote API" : model.backend}</button>`;
+      foot.innerHTML = `<button class="stats" type="button" data-open="trace" aria-label="Open run trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s</button>`;
     } else {
-      routeEls.forEach((el) => { if (el.dataset.state !== "done") el.dataset.state = "idle"; });
       items.forEach((li) => { if (li.dataset.state === "active") li.dataset.state = "cancelled"; });
       const failed = result === "failed";
       setStatus(failed ? "failed" : "cancelled", failed ? "Failed" : "Cancelled");
@@ -546,8 +544,7 @@ function run(text) {
         foot.innerHTML = `<span class="chip" data-state="cancelled">Cancelled</span>`;
       }
     }
-    foot.insertAdjacentHTML("beforeend", contextItems().map((i) => `<span class="chip">${i.label}</span>`).join(""));
-    if (!wide.matches && openSheetId !== "trace") $("#trace-dot").hidden = false;
+    if (openSheetId !== "trace") $("#trace-dot").hidden = false;
     delete els.send.dataset.running;
     els.send.setAttribute("aria-label", "Run request");
     els.send.innerHTML = svgIcon("i-arrow-up");

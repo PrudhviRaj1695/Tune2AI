@@ -6,7 +6,7 @@ The Android sample and developer console for the Tune2AI SDK. The UI is a web pa
 
 Studio runs GGUF models with llama.cpp. Small instruct models work well for testing, for example `SmolLM2-135M-Instruct-Q8_0.gguf` (145 MB) or `qwen2.5-0.5b-instruct-q4_k_m.gguf` (about 400 MB).
 
-- **In the app:** Run setup → **Import a .gguf model**, then pick the file (for example from Downloads).
+- **In the app:** tap the model name at the top → **Import a .gguf model**, then pick the file (for example from Downloads).
 - **With adb (debug builds):** files in the app's `files/models/` folder are registered at startup.
 
   ```sh
@@ -18,26 +18,26 @@ Studio runs GGUF models with llama.cpp. Small instruct models work well for test
 
 ## Remote endpoints
 
-Run setup → **Remote** takes any OpenAI-compatible API (base URL ending in `/v1`, API key, model name). The key stays in memory and is forgotten when the app closes. Release builds require HTTPS; debug builds also allow `http://10.0.2.2` (your development machine, as seen from the emulator) for local servers.
+Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible API (base URL ending in `/v1`, API key, model name). The key stays in memory and is forgotten when the app closes. Release builds require HTTPS; debug builds also allow `http://10.0.2.2` (your development machine, as seen from the emulator) for local servers.
 
 ## Manual test script
 
 | # | Do | Expect |
 |---|---|---|
-| 1 | Launch with no models | Empty state "Add a model to start." with an import button; no "Simulated" badge |
-| 2 | Import a .gguf model | Toast "Imported …"; the model appears in Run setup as Ready and is selected |
+| 1 | Launch with no models | Empty state "Add a model to start." with an import button; no "Preview" badge |
+| 2 | Import a .gguf model | Toast "Imported …"; the model appears in Model & settings as Ready and is selected |
 | 3 | Import a non-GGUF file | Toast saying it is not a valid GGUF model; nothing registered |
-| 4 | Ask "What is the capital of France?" | Route strip lights up step by step; reply streams; stats chip shows first-token time, tok/s, llama.cpp |
+| 4 | Ask "What is the capital of France?" | Reply streams; the line under it shows first-token time and tok/s; tapping it opens Run trace |
 | 5 | Open Run trace | Real step times, router detail with the model name, context sources (prompt v3, conversation), memory from the device |
 | 6 | Ask a follow-up | Context Manager lists the conversation messages; the reply uses them |
 | 7 | Ask for a long story, tap Stop | Status "Cancelled" within about half a second; partial text stays; logcat `stop=cancelled` |
 | 8 | Kill and relaunch the app, ask again | The model is still registered; the conversation history is still used |
-| 9 | Tap New session | Chat, trace, and stored history are cleared |
-| 10 | Switch to Agent or Workflow | Replies are marked "Simulated" until those APIs ship |
+| 9 | Tap New session (pencil icon) | Chat, trace, and stored history are cleared |
+| 10 | Switch to Workflow | Replies are marked "Simulated" until the Workflow API ships. Finance is a Chat preset and runs through the Chat API |
 | 11 | Turn on airplane mode and repeat step 4 | Works the same: inference is on-device |
 | 12 | Toggle system dark mode | The app follows it |
 | 14 | Agent tab with Qwen2.5-0.5B-Instruct (or larger): "Which models are installed, and is one loaded?" | A "Called list_models" card (expand for arguments and result), then a plain-text answer that matches the result |
-| 13 | Run setup → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
+| 13 | Model & settings → Remote: enter base URL, API key, model; Save | Hint shows the endpoint; a wrong key fails with "rejected the API key"; a right key streams with route `remote · <model>` |
 
 Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt tokens, tok/s, and why generation stopped.
 
