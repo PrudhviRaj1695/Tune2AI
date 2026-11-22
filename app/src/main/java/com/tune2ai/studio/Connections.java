@@ -319,6 +319,30 @@ final class Connections {
         return out;
     }
 
+    /** Contacts whose name contains [name]: one line each with phones, emails, and company. */
+    List<String> findContact(String name) {
+        List<String> out = new ArrayList<>();
+        String needle = name.trim().toLowerCase(Locale.ROOT);
+        if (needle.isEmpty()) return out;
+        for (Doc d : readContacts()) {
+            for (String line : d.text.split("\n")) {
+                if (line.startsWith("- ") && line.toLowerCase(Locale.ROOT).contains(needle) && out.size() < 10) out.add(line);
+            }
+        }
+        return out;
+    }
+
+    /** First phone number of the first contact whose name contains [name], or null. */
+    String firstPhone(String name) {
+        Uri uri = Uri.withAppendedPath(ContactsContract.CommonDataKinds.Phone.CONTENT_FILTER_URI, Uri.encode(name.trim()));
+        try (Cursor c = context.getContentResolver().query(uri, new String[] {ContactsContract.CommonDataKinds.Phone.NUMBER}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (RuntimeException ignored) {
+            // no match or provider unavailable
+        }
+        return null;
+    }
+
     /** Newest notifications, optionally only from apps whose name appears in the question. */
     List<String> recentNotifications(int limit, String question) {
         List<JSONObject> all = StudioNotificationListener.read(context);

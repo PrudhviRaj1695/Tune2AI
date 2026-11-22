@@ -76,7 +76,9 @@ final class StudioBridge {
     private final ChatStore chats;
     private volatile String pendingConnect; // connection waiting for a permission answer or a settings visit
 
-    StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote, PhoneContextSource phone) {
+    private final AgentTools agentTools;
+
+    StudioBridge(Activity activity, WebView webView, Tune2AI ai, RemoteSettings remote, PhoneContextSource phone, AgentTools agentTools) {
         this.activity = activity;
         this.webView = webView;
         this.ai = ai;
@@ -86,6 +88,8 @@ final class StudioBridge {
         this.chats = new ChatStore(new File(activity.getFilesDir(), "chats"));
         this.connections = new Connections(activity, ai.getKnowledge(), connector);
         phone.attach(connections);
+        this.agentTools = agentTools;
+        agentTools.attach(connections, ai.getKnowledge());
         indexer.execute(this::syncDueConnections);
         android.content.SharedPreferences prefs = activity.getSharedPreferences("knowledge", Activity.MODE_PRIVATE);
         ai.getKnowledge().setEnabled(prefs.getBoolean("enabled", true));
@@ -110,7 +114,7 @@ final class StudioBridge {
                     Collections.singletonMap("today", MainActivity.today()));
             String prompt = req.getString("prompt");
             Cancellable handle = "Agent".equals(req.optString("mode"))
-                    ? ai.getAgent().stream(prompt, null, new AgentLimits(), options, event -> deliver(id, event))
+                    ? ai.getAgent().stream(prompt, null, new AgentLimits(8, 6), options, event -> deliver(id, event))
                     : ai.getChat().session(sessionOf(req)).stream(prompt, options, event -> deliver(id, event));
             running.put(id, handle);
         } catch (JSONException e) {
@@ -164,6 +168,27 @@ final class StudioBridge {
             notice("Could not delete this chat: " + e.getMessage());
         }
         ai.getChat().session("chat-" + id).clearAsync();
+    }
+
+    /**
+     * Runs an action the agent prepared (send_sms, add_calendar_event, set_alarm, call, share), only
+     * when the user taps its button. Opens the system app filled in; the user confirms there.
+     */
+    @JavascriptInterface
+    public void performAction(String tool, String argumentsJson) {
+        if (!AgentTools.ACTIONS.contains(tool)) return;
+        try {
+            Intent intent = agentTools.intentFor(tool, new JSONObject(argumentsJson));
+            activity.runOnUiThread(() -> {
+                try {
+                    activity.startActivity(intent);
+                } catch (android.content.ActivityNotFoundException e) {
+                    notice("No app on this phone can do that.");
+                }
+            });
+        } catch (JSONException | java.text.ParseException e) {
+            notice("Could not prepare that action: " + e.getMessage());
+        }
     }
 
     @JavascriptInterface

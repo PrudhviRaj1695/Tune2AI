@@ -117,6 +117,9 @@ Model & settings (tap the model name) → **Remote** takes any OpenAI-compatible
 | 27 | Connections → Messages → Connect. Ask "What did <name> text me last?" | Answer quotes the latest SMS from that contact, cited |
 | 28 | Connections → App notifications → Allow → enable in settings → back. Receive a WhatsApp message, tap refresh, ask about it | The message is found |
 | 27a | Full build, Messages connected: "What was my last SMS?" (no sync since it arrived) | Answer quotes the newest SMS; Run trace lists `Phone · latest SMS` |
+| 34 | Agent: "Find my flight details in my sources and add them to my calendar" (with a document containing a flight) | Cards "Searched your sources" and "Prepared an event", then an Add to Calendar button; tapping it opens Calendar filled in |
+| 35 | Agent: "Text Mom that I'll be 10 minutes late" (Contacts connected) | "Looked up a contact", "Prepared a text", and Review in Messages opens Messages with the text, not sent |
+| 36 | Agent with Messages disconnected: "Summarize my latest SMS" | The answer says Messages is not connected and points to Connections |
 | 30 | Ask two questions, tap New chat, ask one more | History lists two chats, newest first, titled by their first question |
 | 31 | Open the first chat, ask "what did I ask first?" | The reply refers to that chat's first question, not the other chat |
 | 32 | Kill and relaunch Studio, open Chats | Both chats are still there and reopen with formatting and citations |
@@ -129,7 +132,22 @@ Per-generation timing is logged: `adb logcat -s Tune2AI-llama:I` prints prompt t
 
 ## Agent tools
 
-Studio registers three demo tools in `MainActivity`: `device_status`, `list_models`, and `current_time`. Agents need a model that follows tool-calling instructions; SmolLM2-135M usually does not, Qwen2.5-0.5B-Instruct or larger does. Keep tool results small and plainly labelled: small models misread raw fields.
+Agent mode runs a bounded tool loop (up to 8 model steps and 6 tool calls) with the tools in `AgentTools.java`, plus `device_status`, `list_models`, and `current_time`:
+
+| Tool | Does |
+|---|---|
+| `search_sources` | Searches Sources and connected data (the knowledge index) |
+| `read_messages` | Newest SMS, optionally from or mentioning someone (full build, Messages connected) |
+| `calendar_events` | Events from today for N days (Calendar connected) |
+| `find_contact` | Numbers and emails by name (Contacts connected) |
+| `recent_calls` | Newest calls (full build, Call history connected) |
+| `read_notifications` | Newest app notifications, optionally from one app (full build) |
+| `save_note` | Saves a note to Sources |
+| `send_sms`, `add_calendar_event`, `set_alarm`, `call`, `share` | **Actions**: prepared only |
+
+Actions never run by themselves. The tool checks the arguments (for example that a time parses) and returns `ready_for_user`; the reply then shows a button (**Review in Messages**, **Add to Calendar**, **Set alarm**, **Call**, **Share**) that opens the system app filled in, where the user confirms. So no SMS-sending or calendar-writing permission is needed, and nothing leaves the phone without a tap. Buttons stay on saved chats.
+
+Agents need a model that follows tool-calling instructions: SmolLM2 usually does not, Qwen2.5-1.5B or Llama 3.2 3B work best. A data tool whose connection is off returns an error telling the model to ask the user to connect it in Connections.
 
 ## Debugging the page
 

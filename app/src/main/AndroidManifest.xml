@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Studio downloads models from Hugging Face (ModelDownloader). The SDK itself stays offline. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Agent set_alarm action: opens the Clock app filled in; the user confirms. Normal permission. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <!-- Connections tab. Each is requested only when the user connects that source, and the data is
          indexed on the device; nothing is uploaded. SMS, call history, and the notification listener

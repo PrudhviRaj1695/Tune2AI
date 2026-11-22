@@ -274,6 +274,14 @@ h1, h2, h3, p { margin: 0; }
 .msg-foot { gap: 2px; margin-left: -6px; }
 .msg-foot .stats { margin-left: 6px; }
 
+/* Agent actions: prepared by the agent, run only when the user taps */
+.action-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+  border: 1px solid var(--ink); border-radius: 14px; background: var(--surface);
+}
+.action-card .row-icon { background: var(--surface-2); color: var(--ink); }
+.action-card small { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: normal; }
+
 /* Chats list */
 #history .sheet-head .pill-button { margin-right: 4px; }
 #history .sheet-head .pill-button .icon { width: 15px; height: 15px; }

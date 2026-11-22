@@ -37,10 +37,10 @@ const MODES = {
       : `**Prompts and outputs never leave this phone.** ${c.backend} runs ${c.model} locally, so:\n\n- There is **no server** that could log your data\n- Replies keep working **offline**\n- Nothing is shared with a third party\n\n### The trade-off\n\n| | On-device | Remote |\n|---|---|---|\n| Privacy | Stays on the phone | Sent over HTTPS |\n| Works offline | Yes | No |\n| Model size | Up to ~3B | Any |\n\nThe Model Manager checks free memory before loading and unloads idle models under pressure, so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
   },
   Agent: {
-    title: "Give an agent a task.",
-    copy: "Agents run bounded steps with tools your app registers, and stop at the limits you set.",
+    title: "Give the agent a task.",
+    copy: "It looks things up in your sources, messages, and calendar, then prepares actions like a text or an event. Nothing is sent until you tap it.",
     placeholder: "Describe a task for the agent…",
-    suggestions: ["How much free memory does this device have?", "Which models are installed, and is one loaded?", "Check device headroom before loading a second model"],
+    suggestions: ["Find my flight details in my sources and add them to my calendar", "Summarize today's calendar and my latest messages", "Text Mom that I'll be 10 minutes late"],
     reply: () => `Done in 3 of 6 allowed steps.\n\n1 · resource_monitor → 3.6 GB free, thermal nominal\n2 · list_models → 1 loaded, 1 ready\n3 · Drafted the plan below\n\nLoading a second model fits now, but unload it when the app goes to the background. Every tool input was validated against its schema before it ran.`,
   },
   Workflow: {
@@ -759,6 +759,7 @@ function setMetrics(first = "—", tps = "—", tokens = "—", total = "—") {
    T2AI-050 replaces simulate() with the native bridge; everything below it stays. */
 function simulate(request, emit) {
   const contextSources = request.sources || null;
+  const toolSteps = request.tools || [];
   const timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   const stepMs = [2, 4, 3, 7];
@@ -770,6 +771,12 @@ function simulate(request, emit) {
   const firstToken = (request.remote ? 900 : 560) + Math.floor(Math.random() * 280);
   const tps = Math.round((request.remote ? REMOTE_TPS : request.tps) * (0.92 + Math.random() * 0.12));
   const pieces = request.text.split(/(\s+)/);
+  toolSteps.forEach((tool, i) => {
+    at(t, () => emit({ type: "tool-call", callId: `call_${i + 1}`, name: tool.name, arguments: JSON.stringify(tool.args) }));
+    t += 450;
+    at(t, () => emit({ type: "tool-result", callId: `call_${i + 1}`, name: tool.name, result: JSON.stringify(tool.result), isError: false }));
+    t += 200;
+  });
   at(t, () => emit({ type: "first-token", ms: firstToken }));
   pieces.forEach((piece, i) => at(t + i * 22, () => emit({ type: "delta", text: piece })));
   const tokens = Math.round(pieces.length * 0.7);
@@ -960,6 +967,50 @@ document.addEventListener("click", (event) => {
   if (retry && !state.run) run(retry.closest(".msg")._prompt);
 });
 
+/* Agent tools (AgentTools.java). Actions only prepare; the button below the reply opens the system
+   app filled in, and the user confirms there. */
+const TOOL_VERB = {
+  search_sources: "Searched your sources", read_messages: "Read your messages", calendar_events: "Checked your calendar",
+  find_contact: "Looked up a contact", recent_calls: "Checked recent calls", read_notifications: "Read notifications",
+  save_note: "Saved a note", send_sms: "Prepared a text", add_calendar_event: "Prepared an event", set_alarm: "Prepared an alarm",
+  call: "Prepared a call", share: "Prepared text to share", current_time: "Checked the time", device_status: "Checked the device",
+};
+const TOOL_ICON = {
+  search_sources: "i-search", read_messages: "i-message", calendar_events: "i-calendar", find_contact: "i-person",
+  recent_calls: "i-phone", read_notifications: "i-bell", save_note: "i-note", send_sms: "i-message",
+  add_calendar_event: "i-calendar", set_alarm: "i-bell", call: "i-phone", share: "i-share",
+};
+const ACTIONS = {
+  send_sms: { label: "Review in Messages", icon: "i-message", describe: (a) => `To ${a.to}: “${a.text}”` },
+  add_calendar_event: { label: "Add to Calendar", icon: "i-calendar", describe: (a) => `${a.title} · ${a.start}${a.end ? `–${a.end.slice(-5)}` : ""}${a.location ? ` · ${a.location}` : ""}` },
+  set_alarm: { label: "Set alarm", icon: "i-bell", describe: (a) => `${a.time}${a.label ? ` · ${a.label}` : ""}` },
+  call: { label: "Call", icon: "i-phone", describe: (a) => `Call ${a.to}` },
+  share: { label: "Share", icon: "i-share", describe: (a) => (a.text.length > 90 ? `${a.text.slice(0, 89)}…` : a.text) },
+};
+
+function addActionButton(msg, card, name, argsJson) {
+  let args = {};
+  try { args = JSON.parse(argsJson); } catch { return; }
+  const a = ACTIONS[name];
+  const box = document.createElement("div");
+  box.className = "action-card";
+  box.innerHTML = `
+    <span class="row-icon">${svgIcon(a.icon)}</span>
+    <span class="model-text"><strong></strong><small></small></span>
+    <button class="pill-button" type="button" data-action="${name}">${a.label}</button>`;
+  $("strong", box).textContent = TOOL_VERB[name];
+  $("small", box).textContent = a.describe(args);
+  box.querySelector("button").dataset.args = JSON.stringify(args);
+  card.after(box);
+}
+
+document.addEventListener("click", (event) => {
+  const btn = event.target.closest("[data-action]");
+  if (!btn) return;
+  if (live) bridge.performAction(btn.dataset.action, btn.dataset.args);
+  else toast(`On the phone this opens ${{ send_sms: "Messages", add_calendar_event: "Calendar", set_alarm: "Clock", call: "the dialer", share: "the share sheet" }[btn.dataset.action]}, filled in, for you to confirm.`);
+});
+
 /* Tool activity in an agent reply: one expandable card per call, with arguments and result. */
 const prettyJson = (json) => {
   try { return JSON.stringify(JSON.parse(json), null, 2); } catch { return json; }
@@ -970,8 +1021,8 @@ function addToolCard(msg, e) {
   card.className = "tool-card";
   card.dataset.call = e.callId;
   card.dataset.state = "running";
-  card.innerHTML = `<summary>${svgIcon("i-tool")}<span>Called <strong></strong></span><span class="tool-state">Running…</span></summary><pre></pre>`;
-  $("strong", card).textContent = e.name;
+  card.innerHTML = `<summary>${svgIcon(TOOL_ICON[e.name] || "i-tool")}<span>${TOOL_VERB[e.name] || "Called"} <strong></strong></span><span class="tool-state">Running…</span></summary><pre></pre>`;
+  $("strong", card).textContent = TOOL_VERB[e.name] ? "" : e.name;
   $("pre", card).textContent = prettyJson(e.arguments);
   $(".tools", msg).append(card);
   (msg._tools ||= []).push({ callId: e.callId, name: e.name, arguments: e.arguments, result: null, isError: false });
@@ -987,6 +1038,7 @@ function finishToolCard(msg, e) {
   card.append(result);
   const saved = (msg._tools || []).find((t) => t.callId === e.callId);
   if (saved) Object.assign(saved, { result: e.result, isError: e.isError });
+  if (!e.isError && ACTIONS[e.name]) addActionButton(msg, card, e.name, e.arguments ?? saved?.arguments ?? "{}");
 }
 
 function run(text) {
@@ -1096,13 +1148,43 @@ function run(text) {
   }
 
   // Preview: a question about the sample trip shows a cited answer from the sample sources.
-  const previewCited = !live && knowledge?.enabled && /lisbon|flight|trip/i.test(text) && knowledge.sources.some((src) => src.name === "Lisbon trip.md");
+  const previewAgent = !live && state.mode === "Agent" ? previewAgentRun(text) : null;
+  const previewCited = !previewAgent && !live && knowledge?.enabled && /lisbon|flight|trip/i.test(text) && knowledge.sources.some((src) => src.name === "Lisbon trip.md");
   const stop = simulated
-    ? simulate(previewCited
+    ? simulate(previewAgent ? { ...previewAgent, remote, tps: model.tps || 40 } : previewCited
       ? { text: "Your flight leaves **Friday at 07:40** from **Terminal 2** [1].\n\n- Check-in closes **45 minutes** before departure [1]\n- Hotel check-in is after **15:00** [1]\n\nWant a reminder the evening before?", sources: ["prompt:helpful-assistant@5", "rag:Lisbon trip.md#2-3"], remote, tps: model.tps || 40 }
       : { text: MODES[state.mode].reply({ model: model.name, backend: model.backend, remote }), remote, tps: model.tps || 40 }, onEvent)
     : liveSource(text, onEvent);
   state.run = { cancel: () => { stop(); finish("cancelled"); } };
+}
+
+/* Browser preview only: what an agent run looks like, with tool calls. */
+function previewAgentRun(text) {
+  if (/flight|calendar.*sources|sources.*calendar/i.test(text)) {
+    return {
+      tools: [
+        { name: "search_sources", args: { query: "flight details" }, result: [{ source: "Lisbon trip.md", text: "We fly out on Friday at 07:40 from Terminal 2 (TAP TP1351)." }] },
+        { name: "add_calendar_event", args: { title: "Flight TP1351 to Lisbon", start: "2026-11-27 07:40", end: "2026-11-27 10:15", location: "Terminal 2" }, result: { status: "ready_for_user" } },
+      ],
+      text: "I found your flight in **Lisbon trip.md**: TAP **TP1351**, Friday 27 November at **07:40** from Terminal 2.\n\nI've prepared the calendar event. Tap **Add to Calendar** to review and save it.",
+    };
+  }
+  if (/text|sms|message .* late|tell/i.test(text)) {
+    return {
+      tools: [
+        { name: "find_contact", args: { name: "Mom" }, result: "- Mom: phone +91 98450 12345" },
+        { name: "send_sms", args: { to: "+91 98450 12345", text: "Running about 10 minutes late, see you soon!" }, result: { status: "ready_for_user" } },
+      ],
+      text: "Your text to **Mom** is ready. Tap **Review in Messages** to check it and send.",
+    };
+  }
+  return {
+    tools: [
+      { name: "calendar_events", args: { days: 1 }, result: "- Sun 22 Nov, 10:00–10:30: Team standup\n- Sun 22 Nov, 19:00: Dinner with Priya · at Toit" },
+      { name: "read_messages", args: { limit: 5 }, result: "- 22 Nov 09:12 · HDFC Bank: Rs 2,500 debited\n- 22 Nov 08:40 · Priya: See you at 7!" },
+    ],
+    text: "### Today\n\n- **10:00** Team standup (30 min)\n- **19:00** Dinner with Priya at Toit\n\n### Latest messages\n\n- **HDFC Bank:** ₹2,500 debited this morning\n- **Priya:** \"See you at 7!\"",
+  };
 }
 
 /* ---------- Composer ---------- */
@@ -1232,12 +1314,13 @@ function addSavedAssistant(m, prompt) {
     <div class="msg-foot"></div>`;
   $(".msg-head strong", msg).textContent = m.model || "Assistant";
   els.conversation.append(msg);
-  Object.assign(msg, { _raw: m.text || "", _refs: m.refs || [], _prompt: prompt, _tools: m.tools || [] });
-  (m.tools || []).forEach((t) => {
+  const savedTools = (m.tools || []).map((t) => ({ ...t }));
+  Object.assign(msg, { _raw: m.text || "", _refs: m.refs || [], _prompt: prompt, _tools: [] });
+  savedTools.forEach((t) => { // redraws cards (and action buttons) without duplicating the saved list
     addToolCard(msg, t);
     if (t.result != null) finishToolCard(msg, t);
   });
-  msg._tools = m.tools || [];
+  msg._tools = savedTools;
   renderAnswer(msg);
   renderSourceChips(msg);
   $(".msg-foot", msg).innerHTML = m.status === "cancelled" ? `<span class="chip" data-state="cancelled">Cancelled</span>` : `

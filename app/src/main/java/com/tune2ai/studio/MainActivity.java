@@ -36,6 +36,7 @@ public final class MainActivity extends Activity {
     private WebView webView;
     private Tune2AI ai;
     private final PhoneContextSource phone = new PhoneContextSource();
+    private AgentTools agentTools;
     private StudioBridge bridge;
     private final RemoteSettings remote = new RemoteSettings();
 
@@ -43,7 +44,11 @@ public final class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        ai = new Tune2AI.Builder(this)
+        agentTools = new AgentTools();
+        Tune2AI.Builder builder = new Tune2AI.Builder(this);
+        // Agent tools: look things up in sources and phone data; prepare actions the user confirms.
+        for (Tool tool : agentTools.tools()) builder.addTool(tool);
+        ai = builder
                 .addBackend(new LlamaBackend())
                 .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
                 // v5: asks for Markdown structure (Studio renders it) and knows the date, so questions about
@@ -85,7 +90,7 @@ public final class MainActivity extends Activity {
             WebView.setWebContentsDebuggingEnabled(true); // chrome://inspect in debug builds only
         }
 
-        bridge = new StudioBridge(this, webView, ai, remote, phone);
+        bridge = new StudioBridge(this, webView, ai, remote, phone, agentTools);
         webView.addJavascriptInterface(bridge, "Tune2AIBridge");
 
         // Edge-to-edge is enforced from targetSdk 35: pad for system bars and the keyboard.
