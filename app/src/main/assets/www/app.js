@@ -31,8 +31,8 @@ const formatBytes = (n) => (n >= 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${Math.ro
 
 const MODES = {
   Chat: {
-    title: "Ask anything. Watch the whole route.",
-    copy: "Every request runs the path your app will: API, controller, router, context, inference.",
+    title: "Ask anything.",
+    copy: "Private by design. Every request runs through the same path your app will use.",
     placeholder: "Message Tune2AI…",
     suggestions: ["How does on-device inference protect user data?", "Draft a release note for our chat feature", "Compare 3B and 8B models on a mid-range phone"],
     reply: (c) => c.remote
@@ -40,21 +40,21 @@ const MODES = {
       : `Prompts and outputs never leave this phone: ${c.backend} runs ${c.model} locally, so there is no server to log data and replies keep working offline.\n\nThe trade-off is device headroom. The Model Manager checks free memory before loading, and the Device Resource Monitor can unload idle models under pressure so your app stays responsive.\n\nWant me to draft the privacy note for your release?`,
   },
   Agent: {
-    title: "Check whether this device is ready to run a model.",
-    copy: "The readiness advisor checks live device resources and model memory estimates, then explains which installed models appear safe to load.",
+    title: "Is this device ready?",
+    copy: "The agent checks live device resources and tells you which installed models are safe to load.",
     placeholder: "Describe a task for the agent…",
     suggestions: ["Is my device ready to load another model?", "Which installed models appear safe to run?", "Check the device's memory, battery, and thermal state"],
     reply: () => `I checked the current device resources and the installed models' memory estimates. Models marked “appears safe to load” fit the SDK's current resource limits at the time of the check.\n\nThis is an estimate, not a guarantee: available memory and thermal state can change before loading. I did not load or unload any model.`,
   },
   Finance: {
-    title: "Understand spending from messages you choose to share.",
+    title: "Understand your spending.",
     copy: "In your messaging app, select transaction alerts and choose Share → Tune2AI Studio. Only aggregated totals stay in memory; finance questions always use an on-device model. A bank CSV can also be imported.",
     placeholder: "Ask about spending, income, or category totals…",
     suggestions: ["Where does most of my spending go?", "How much came in versus went out?", "What is the net amount in this statement?"],
     reply: () => "Finance insights are available in the Android app after you share transaction messages or import a statement CSV.",
   },
   Workflow: {
-    title: "Chain model and tool steps into one run.",
+    title: "Chain steps into one run.",
     copy: "Workflows checkpoint after each step, so a run can resume after the app restarts.",
     placeholder: "Describe the workflow input…",
     suggestions: ["Summarize → classify → draft a reply to a support ticket", "Translate, check tone, then shorten", "Extract action items from meeting notes"],
@@ -137,6 +137,7 @@ function renderModels() {
       <span class="mono-tile" aria-hidden="true">${m.mono}</span>
       <span class="model-text"><strong>${m.name}</strong><small>${m.backend} · ${m.size}${m.unavailable ? ` · ${m.unavailable}` : ""}</small></span>
       <span class="model-state" data-state="${(m.state || "").toLowerCase()}">${m.unavailable ? "Unavailable" : m.state}</span>
+      <span class="model-check">${svgIcon("i-check")}</span>
     </label>`).join("") + importButton;
 }
 
@@ -234,6 +235,7 @@ function renderRuntime() {
   const remote = isRemoteRun();
   const chip = $("#model-chip");
   $("#model-chip-label").textContent = model.short;
+  $("#model-chip-sub").textContent = remote ? "Remote API" : "On-device · Private";
   chip.toggleAttribute("data-remote", remote);
   $(".model-chip-kind use", chip).setAttribute("href", remote ? "#i-cloud" : "#i-chip");
   chip.setAttribute("aria-label", `${model.short}, ${remote ? "remote" : "on-device"}. Change run setup`);
@@ -298,8 +300,8 @@ function renderMode() {
   $("#finance-import").textContent = "Import statement CSV";
   $("#finance-clear").hidden = !(live && state.mode === "Finance" && state.financeSummary);
   $("#suggestions").innerHTML = needsModel
-    ? `<button class="suggestion" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
-    : mode.suggestions.map((s) => `<button class="suggestion" type="button">${svgIcon("i-spark")}<span>${s}</span></button>`).join("");
+    ? `<button class="suggestion suggestion-primary" type="button" data-import>${svgIcon("i-plus")}<span>Import a .gguf model</span></button>`
+    : mode.suggestions.map((s) => `<button class="suggestion" type="button"><span>${s}</span>${svgIcon("i-arrow-up")}</button>`).join("");
 }
 document.addEventListener("click", (event) => {
   const link = event.target.closest("[data-goto]");
@@ -473,10 +475,9 @@ function addAssistantMessage(simulated) {
   msg.dataset.mode = state.mode;
   msg.innerHTML = `
     <div class="msg-head">
-      <svg class="avatar" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="9" fill="url(#brand-gradient)" /><path d="M6 17c2 0 2-6 4-6s2 10 4 10 2-13 4-13 2 9 4 9 2-4 4-4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" /></svg>
-      <strong>Tune2AI</strong><span>${isRemoteRun() ? "Remote" : "On-device"} · ${model.short}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
+      <span class="msg-dot" aria-hidden="true"></span><strong>${model.short}</strong><span>${isRemoteRun() ? "Remote" : "On-device"}</span>${simulated && live ? '<span class="chip chip-sim">Simulated</span>' : ""}
     </div>
-    <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l, i) => `${i ? '<span class="route-link"></span>' : ""}<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
+    <div class="route" aria-label="Request route">${ROUTE_LABELS.map((l) => `<span class="route-step" data-state="idle">${l}</span>`).join("")}</div>
     <div class="tools"></div>
     <div class="answer is-streaming"><p></p></div>
     <div class="msg-foot"></div>`;
@@ -581,7 +582,7 @@ function run(text) {
       $(".step-time", items[4]).textContent = `${stats.totalMs} ms`;
       setStatus("ok", "Completed");
       setMetrics(`${((firstMs ?? 0) / 1000).toFixed(2)} s`, `${stats.tps} tok/s`, `${stats.tokens} tok`, `${(stats.totalMs / 1000).toFixed(1)} s`);
-      foot.innerHTML = `<button class="chip chip-stats" type="button" data-open="trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s · ${remote ? "Remote API" : model.backend}</button>`;
+      foot.innerHTML = `<button class="chip chip-stats" type="button" data-open="trace">${svgIcon("i-activity")}${((firstMs ?? 0) / 1000).toFixed(2)} s · ${stats.tps} tok/s</button>`;
     } else {
       routeEls.forEach((el) => { if (el.dataset.state !== "done") el.dataset.state = "idle"; });
       items.forEach((li) => { if (li.dataset.state === "active") li.dataset.state = "cancelled"; });
@@ -600,7 +601,6 @@ function run(text) {
         foot.innerHTML = `<span class="chip" data-state="cancelled">Cancelled</span>`;
       }
     }
-    foot.insertAdjacentHTML("beforeend", contextItems().map((i) => `<span class="chip">${i.label}</span>`).join(""));
     if (!wide.matches && openSheetId !== "trace") $("#trace-dot").hidden = false;
     delete els.send.dataset.running;
     els.send.setAttribute("aria-label", "Run request");
