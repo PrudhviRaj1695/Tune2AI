@@ -31,7 +31,7 @@ import com.tune2ai.sdk.services.prompt.PromptTemplate;
 
 public final class MainActivity extends Activity {
     private static final String PAGE_ROOT = "file:///android_asset/www/";
-    static final String SYSTEM_PROMPT = "You are a helpful assistant running privately on the user's phone. It is now {{today}}. Answer accurately and get to the point. Format replies in Markdown when it helps: short paragraphs, bullet or numbered lists for steps and options, **bold** for key facts, a table for comparisons, and fenced code blocks for code. Skip headings in short answers. If you are not sure, say so.";
+    static final String SYSTEM_PROMPT = "You are a helpful assistant running privately on the user's phone. It is now {{today}}. Answer the question in the first sentence, then stop: two to four sentences, or a short list, unless the user asks for detail. For questions about the user's messages, files, or phone, answer only from the information given; if the answer is not there, say so instead of guessing. Use Markdown only when it helps: a list for steps, **bold** for the key fact, a table for comparisons, fenced code blocks for code. No headings.";
 
     private WebView webView;
     private Tune2AI ai;
@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
                 .addBackend(new RemoteBackend(() -> remote.baseUrl, () -> remote.apiKey))
                 // v5: asks for Markdown structure (Studio renders it) and knows the date, so questions about
                 // "today" or "next Friday" over calendar and message sources make sense.
-                .addPromptTemplate(new PromptTemplate("helpful-assistant", 5, SYSTEM_PROMPT, Collections.singleton("today")))
+                .addPromptTemplate(new PromptTemplate("helpful-assistant", 6, SYSTEM_PROMPT, Collections.singleton("today")))
                 .defaultPromptTemplate("helpful-assistant")
                 // Live messages, calls, calendar, and notifications for questions about them.
                 .addContextSource(phone)

@@ -509,7 +509,7 @@ final class StudioBridge {
             d.put("supported", supported);
             o.put("device", d);
             JSONArray models = new JSONArray();
-            for (ModelAdvisor.Assessment a : ModelAdvisor.assess(mem.totalMem, mem.availMem, freeStorage, supported)) {
+            for (ModelAdvisor.Assessment a : ModelAdvisor.assess(mem.totalMem, mem.availMem, freeStorage, supported, gpuRunsQ4_0())) {
                 JSONObject m = new JSONObject();
                 m.put("id", a.entry.id);
                 m.put("name", a.entry.name);
@@ -527,6 +527,13 @@ final class StudioBridge {
             // values above are always valid
         }
         return o.toString();
+    }
+
+    /** Whether models may run on a GPU here that takes Q4_0 builds (Adreno via OpenCL), so GPU builds are recommended. */
+    private boolean gpuRunsQ4_0() {
+        if ("cpu".equals(settingsPrefs().getString("hardware", "auto"))) return false;
+        for (String a : LlamaBackend.availableAccelerators()) if (a.contains("OpenCL")) return true;
+        return false;
     }
 
     /**
@@ -548,7 +555,7 @@ final class StudioBridge {
                 || Arrays.asList(Build.SUPPORTED_ABIS).contains("x86_64");
         ModelAdvisor.Assessment assessment = null;
         for (ModelAdvisor.Assessment candidate : ModelAdvisor.assess(
-                mem.totalMem, mem.availMem, freeStorage, supported)) {
+                mem.totalMem, mem.availMem, freeStorage, supported, gpuRunsQ4_0())) {
             if (candidate.entry.id.equals(entry.id)) {
                 assessment = candidate;
                 break;

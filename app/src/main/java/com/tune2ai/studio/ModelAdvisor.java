@@ -125,6 +125,20 @@ final class ModelAdvisor {
      */
     static List<Assessment> assess(long totalRamBytes, long availableRamBytes, long freeStorageBytes,
             boolean supportedAbi) {
+        return assess(totalRamBytes, availableRamBytes, freeStorageBytes, supportedAbi, false);
+    }
+
+    /**
+     * Rates every catalog entry. {@link Fit#BEST} is the model with the best speed and quality trade-off, not the
+     * largest: on a phone CPU a 3B model reads a prompt at a third of a 1B model's speed, and 7B/8B models write
+     * only a few words a second. So the CPU pick is at most {@link #CPU_FAST_BYTES}; with a GPU that runs Q4_0
+     * models (Adreno, OpenCL) the GPU builds are preferred and may go up to 3B. Models above
+     * {@link #LARGE_BYTES} are offered but never recommended.
+     *
+     * @param gpuQ4_0 whether this phone has a GPU that runs Q4_0 models
+     */
+    static List<Assessment> assess(long totalRamBytes, long availableRamBytes, long freeStorageBytes,
+            boolean supportedAbi, boolean gpuQ4_0) {
         long budget = Math.min((long) (totalRamBytes * RAM_BUDGET), availableRamBytes);
         List<Assessment> out = new ArrayList<>();
         int best = -1;
@@ -144,15 +158,37 @@ final class ModelAdvisor {
             } else {
                 fit = Fit.FITS;
                 reason = "Uses about " + gb(e.memoryBytes()) + " of RAM.";
-                best = out.size();
+                if (recommendable(e, gpuQ4_0) && (best < 0 || better(e, out.get(best).entry, gpuQ4_0))) best = out.size();
             }
             out.add(new Assessment(e, fit, reason));
         }
         if (best >= 0) {
             Assessment a = out.get(best);
-            out.set(best, new Assessment(a.entry, Fit.BEST, "Largest model that runs safely on this phone. " + a.reason));
+            String why = gpuQ4_0 && isGpuBuild(a.entry) ? "Runs on this phone's GPU: the fastest good answers here. "
+                    : "Best balance of speed and answer quality on this phone. ";
+            out.set(best, new Assessment(a.entry, Fit.BEST, why + a.reason));
         }
         return out;
+    }
+
+    /** Files above this are never recommended (7B/8B: a few words a second on a phone). */
+    static final long LARGE_BYTES = 2_500_000_000L;
+    /** Largest file recommended when the model runs on the CPU (Qwen2.5 1.5B). */
+    static final long CPU_FAST_BYTES = 1_200_000_000L;
+
+    static boolean isGpuBuild(Entry e) {
+        return e.fileName.contains("Q4_0") || e.fileName.contains("q4_0");
+    }
+
+    private static boolean recommendable(Entry e, boolean gpu) {
+        if (e.sizeBytes > LARGE_BYTES) return false;
+        return gpu ? true : e.sizeBytes <= CPU_FAST_BYTES;
+    }
+
+    /** With a GPU, a GPU build beats any CPU build; otherwise (and between equals) the larger model wins. */
+    private static boolean better(Entry candidate, Entry current, boolean gpu) {
+        if (gpu && isGpuBuild(candidate) != isGpuBuild(current)) return isGpuBuild(candidate);
+        return candidate.sizeBytes >= current.sizeBytes;
     }
 
     /** Compatibility helper for JVM callers that only have the total-memory estimate. */

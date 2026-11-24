@@ -20,7 +20,9 @@ import java.util.regex.Pattern;
  * questions slip through.
  */
 final class PhoneContextSource extends BlockingContextSource {
-    private static final Pattern SMS = Pattern.compile("\\b(sms|texts?|texted|messages?|messaged|msgs?|otp|inbox)\\b");
+    private static final Pattern SMS = Pattern.compile("\\b(sms|texts?|texted|messages?|messaged|msgs?|otp|inbox|sent|send|debited|credited|"
+            + "transactions?|upi|bank|delivery|delivered|order|courier|bill|payments?|paid|code)\\b");
+    private static final Pattern GENERIC = Pattern.compile("(sms|texts?|texted|messages?|messaged|msgs?|inbox|sent|send)");
     private static final Pattern CALLS = Pattern.compile("\\b(calls?|called|calling|missed|dialed|dialled|rang)\\b");
     private static final Pattern CALENDAR = Pattern.compile(
             "\\b(calendar|meetings?|events?|schedule|appointments?|agenda|today|tonight|tomorrow|week|weekend|free|busy|plans?)\\b");
@@ -47,7 +49,14 @@ final class PhoneContextSource extends BlockingContextSource {
         if (c == null) return items;
         String q = query.toLowerCase(Locale.ROOT);
         boolean messages = SMS.matcher(q).find();
-        if (messages && c.usable("sms")) add(items, "latest SMS", "Latest SMS messages (newest first)", c.recentSms(LIMIT, null));
+        if (messages && c.usable("sms")) {
+            // "My HDFC OTP", "what did Ravi send": read the messages that mention the names and words asked about,
+            // not just the newest few (which may not include them). Nothing matched: the newest messages.
+            List<String> terms = searchTerms(q);
+            List<String> matching = terms.isEmpty() ? new ArrayList<>() : c.smsMatching(LIMIT, terms);
+            if (!matching.isEmpty()) add(items, "matching SMS", "SMS mentioning " + String.join(", ", terms) + " (best match first)", matching);
+            else add(items, "latest SMS", "Latest SMS messages (newest first)", c.recentSms(LIMIT, null));
+        }
         if (CALLS.matcher(q).find() && c.usable("calls")) add(items, "latest calls", "Latest calls (newest first)", c.recentCalls(LIMIT));
         if (CALENDAR.matcher(q).find() && c.usable("calendar")) add(items, "upcoming events", "Calendar from today through the next 7 days", c.upcomingEvents(7));
         if ((messages || NOTIFICATIONS.matcher(q).find()) && c.usable("notifications")) {
@@ -55,6 +64,27 @@ final class PhoneContextSource extends BlockingContextSource {
         }
         return items;
     }
+
+    /** Words in the question that name something to look for: not question words, filler, or the trigger words. */
+    static List<String> searchTerms(String lowerQuery) {
+        List<String> out = new ArrayList<>();
+        for (String w : lowerQuery.split("[^\\p{L}\\p{N}]+")) {
+            // Words that only say "a message" are dropped; ones that name content (otp, debited, bank) are kept.
+            if (w.length() < 3 && !w.matches("\\d+") || STOP.contains(w) || GENERIC.matcher(w).matches()
+                    || NOTIFICATIONS.matcher(w).matches() || out.contains(w)) continue;
+            out.add(w);
+            if (out.size() == 4) break;
+        }
+        return out;
+    }
+
+    private static final java.util.Set<String> STOP = new java.util.HashSet<>(java.util.Arrays.asList(
+            "what", "when", "where", "which", "who", "whom", "why", "how", "did", "does", "the", "and", "for", "from", "with",
+            "about", "any", "all", "show", "tell", "get", "give", "read", "find", "last", "latest", "recent", "new", "today",
+            "yesterday", "say", "said", "have", "has", "had", "was", "were", "are", "you", "your", "this", "that", "there",
+            "please", "can", "could", "would", "my", "me", "mine", "our", "is", "it", "its", "of", "to", "in", "on", "at",
+            "check", "see", "got", "received", "receive", "list", "summarize", "summarise", "today's", "week", "month",
+            "one", "ones", "some", "many", "much", "anything", "something", "them", "they", "he", "she", "his", "her"));
 
     private static void add(List<ContextItem> items, String ref, String title, List<String> lines) {
         items.add(new ContextItem(ref, title + ":\n" + (lines.isEmpty() ? "(none)" : String.join("\n", lines))));

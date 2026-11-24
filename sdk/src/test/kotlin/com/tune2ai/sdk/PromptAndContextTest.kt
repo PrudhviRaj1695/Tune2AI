@@ -77,11 +77,50 @@ class PromptAndContextTest {
         val result = context.assemble(turns, fakeModel(contextLength = 600), RequestOptions(maxTokens = 100))
 
         // Budget 600 - 100 = 500; each message costs 104; system + latest = 208, so 2 of 10 history messages fit.
-        assertEquals(4, result.messages.size)
+        // Turns go in blocks of 6 (so the kept history starts at the same message for several turns and the
+        // model's cache stays valid): dropping 6 is not enough, so 12 -> all 10 go.
+        assertEquals(2, result.messages.size)
         assertEquals("latest", result.messages.last().content)
-        assertEquals("a9", result.messages[result.messages.size - 2].content) // newest history kept
-        assertEquals(listOf("conversation:8 oldest messages"), result.omitted)
-        assertTrue(result.summary.contains("trimmed 8"))
+        assertEquals(listOf("conversation:10 oldest messages"), result.omitted)
+        assertTrue(result.summary.contains("trimmed 10"))
+    }
+
+    @Test
+    fun trimmingKeepsTheSameStartForSeveralTurns() = runTest {
+        val context = ContextManager(prompts, "assistant", countTokens = { 100 })
+        fun turns(n: Int) = List(n) { if (it % 2 == 0) ChatMessage.user("q$it") else ChatMessage.assistant("a$it") } + ChatMessage.user("latest")
+        // Budget 1100 - 100 = 1000: system + latest 208, so 7 history messages fit.
+        val starts = listOf(8, 10, 12).map { n ->
+            context.assemble(turns(n), fakeModel(contextLength = 1100), RequestOptions(maxTokens = 100)).messages[1].content
+        }
+        assertEquals("q6", starts[0])
+        assertEquals("same first message on the next two turns", listOf("q6", "q6", "q6"), starts)
+    }
+
+    @Test
+    fun followUpsAreSearchedWithThePreviousQuestion() = runTest {
+        val queries = mutableListOf<String>()
+        val spy = object : ContextSource {
+            override val name = "knowledge"
+            override suspend fun fetch(query: String, model: com.tune2ai.sdk.api.ModelDescriptor) = emptyList<ContextItem>().also { queries += query }
+        }
+        val context = ContextManager(prompts, sources = listOf(spy))
+        val earlier = listOf(ChatMessage.user("What did Ravi say about the rent?"), ChatMessage.assistant("He said it is due Friday."))
+        context.assemble(earlier + ChatMessage.user("and when did he send it?"), fakeModel(), RequestOptions(maxTokens = 64))
+        context.assemble(earlier + ChatMessage.user("thanks"), fakeModel(), RequestOptions(maxTokens = 64))
+        context.assemble(earlier + ChatMessage.user("Which hotel is booked for the Goa trip next month?"), fakeModel(), RequestOptions(maxTokens = 64))
+
+        assertTrue(queries[0].contains("Ravi") && queries[0].contains("when did he send it"))
+        assertEquals("thanks", queries[1])
+        assertEquals("Which hotel is booked for the Goa trip next month?", queries[2])
+    }
+
+    @Test
+    fun aLargeReplySettingDoesNotSqueezeOutTheInput() = runTest {
+        val context = ContextManager(prompts, countTokens = { it.length })
+        // 256-token window, max tokens 200: only 64 (a quarter) is held back, so a 150-token message still fits.
+        val result = context.assemble(listOf(ChatMessage.user("x".repeat(150))), fakeModel(contextLength = 256), RequestOptions(maxTokens = 200))
+        assertEquals(1, result.messages.size)
     }
 
     @Test

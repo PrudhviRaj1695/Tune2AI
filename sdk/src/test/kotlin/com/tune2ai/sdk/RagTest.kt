@@ -331,6 +331,14 @@ class RagTest {
     }
 
     @Test
+    fun eachEmbeddingModelHasItsOwnRelevanceFloor() {
+        val q = com.tune2ai.sdk.services.rag.QueryStyle
+        assertEquals(0.55f, q.of("bge-small-en-v1.5-q8_0").minCosine)
+        assertEquals(0.45f, q.of("nomic-embed-text-v1.5.q8_0").minCosine)
+        assertEquals(0.40f, q.of("embeddinggemma-300m-q8_0").minCosine)
+    }
+
+    @Test
     fun smallTalkRetrievesNothing() = runTest {
         val rag = engine(withEmbedder = false)
         rag.add("sms", "sms", "Hi, your OTP is 4411. Thanks, good morning!")

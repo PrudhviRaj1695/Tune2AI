@@ -16,11 +16,21 @@ public class ModelAdvisorTest {
     /** Phones report less than the marketed RAM: an "8 GB" phone typically reports about 7.4 GB. */
     @Test
     public void recommendsLargestModelThatFits() {
-        assertEquals("Llama 3.2 3B", best(7_400_000_000L));
+        // CPU only: at most 1.5B, so answers stay fast.
+        assertEquals("Qwen2.5 1.5B", best(7_400_000_000L));
+        assertEquals("Qwen2.5 1.5B", best(16_000_000_000L));
         assertEquals("Qwen2.5 1.5B", best(5_600_000_000L));
         assertEquals("Llama 3.2 1B", best(3_700_000_000L));
         assertEquals("Qwen2.5 0.5B", best(2_800_000_000L));
         assertEquals("SmolLM2 360M", best(1_800_000_000L));
+    }
+
+    @Test
+    public void aPhoneWithAGpuGetsTheGpuBuild() {
+        assertEquals("Llama 3.2 3B GPU", bestOf(ModelAdvisor.assess(7_400_000_000L, PLENTY, PLENTY, true, true)));
+        assertEquals("Llama 3.2 1B GPU", bestOf(ModelAdvisor.assess(3_700_000_000L, PLENTY, PLENTY, true, true)));
+        // 7B and 8B fit a 16 GB phone but are never the recommendation.
+        assertEquals("Llama 3.2 3B GPU", bestOf(ModelAdvisor.assess(16_000_000_000L, PLENTY, PLENTY, true, true)));
     }
 
     @Test

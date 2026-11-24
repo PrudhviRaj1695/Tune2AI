@@ -173,7 +173,10 @@ class RagEngine(
         }
         // Relative cut as well as the floor: passages far weaker than the best match are noise.
         val bestCosine = cosines.values.maxOrNull() ?: 0f
-        val floor = maxOf(minSimilarity, bestCosine - RELATIVE_COSINE_GAP)
+        // Each embedding model scores on its own scale (EmbeddingGemma and Nomic score relevant passages lower than
+        // BGE), so the floor is the model's own, moved by how far the app's setting is from the default.
+        val modelFloor = (model?.let { QueryStyle.of(it).minCosine } ?: MIN_COSINE) + (minSimilarity - MIN_COSINE)
+        val floor = maxOf(modelFloor, bestCosine - RELATIVE_COSINE_GAP)
         val semantic = cosines.entries.filter { it.value >= floor }.sortedByDescending { it.value }.take(CANDIDATES).map { it.key }
 
         // 2. Keyword ranking. Keyword-only hits must cover enough of the question to count.
@@ -187,7 +190,21 @@ class RagEngine(
         val fused = HashMap<String, Float>()
         semantic.forEachIndexed { rank, k -> fused[k] = (fused[k] ?: 0f) + 1f / (RRF_K + rank + 1) }
         keyword.forEachIndexed { rank, k -> fused[k] = (fused[k] ?: 0f) + 1f / (RRF_K + rank + 1) }
-        val ranked = fused.entries.sortedByDescending { it.value }.map { byKey.getValue(it.key) }
+        val fusedOrder = fused.entries.sortedByDescending { it.value }.map { it.key }
+        // 4. Re-score the top candidates. Rank fusion only sees positions, so a passage that is a near-tie on
+        // meaning but answers every word of the question can sit 4th and be cut. Blend the actual similarity with
+        // how much of the question each passage covers.
+        val head = fusedOrder.take(RERANK_DEPTH)
+        val reranked = if (!semanticRan || head.size < 2) head else {
+            val span = (bestCosine - floor).coerceAtLeast(0.01f)
+            fun blended(k: String): Float {
+                val meaning = (((cosines[k] ?: floor) - floor) / span).coerceIn(0f, 1f)
+                val words = keywordByChunk[byKey.getValue(k)]?.coverage ?: 0f
+                return MEANING_WEIGHT * meaning + (1 - MEANING_WEIGHT) * words
+            }
+            head.sortedByDescending(::blended)
+        }
+        val ranked = (reranked + fusedOrder.drop(RERANK_DEPTH)).map { byKey.getValue(it) }
 
         // Diversity: at most MAX_PER_SOURCE chunks per document, unless only one document matched.
         val manySources = ranked.map { it.sourceId }.distinct().size > 1
@@ -282,6 +299,8 @@ class RagEngine(
 
         /** Semantic hits more than this below the best match are left out. */
         private const val RELATIVE_COSINE_GAP = 0.12f
+        private const val RERANK_DEPTH = 10
+        private const val MEANING_WEIGHT = 0.7f
 
         private val STOP_WORDS = setOf(
             "a", "about", "an", "and", "any", "are", "as", "at", "be", "by", "can", "could", "did", "do", "does", "for",
@@ -328,7 +347,12 @@ class RagEngine(
  * trained with these prefixes, and leaving them out costs accuracy.
  * ponytail: matched on the model id; move into ModelDescriptor metadata if apps bring other models.
  */
-internal class QueryStyle(private val queryFormat: (String) -> String, private val documentFormat: (String, String) -> String) {
+internal class QueryStyle(
+    private val queryFormat: (String) -> String,
+    private val documentFormat: (String, String) -> String,
+    /** Lowest cosine this model gives a relevant passage at the default setting. */
+    val minCosine: Float = RagEngine.MIN_COSINE,
+) {
     fun query(text: String) = queryFormat(text)
     fun document(title: String, text: String) = documentFormat(title, text)
 
@@ -340,10 +364,11 @@ internal class QueryStyle(private val queryFormat: (String) -> String, private v
                 "embeddinggemma" in id || "gemma-embed" in id -> QueryStyle(
                     { "task: search result | query: $it" },
                     { title, text -> "title: ${title.ifBlank { "none" }} | text: $text" },
+                    minCosine = 0.40f,
                 )
                 "bge" in id && "-zh" !in id && "m3" !in id -> QueryStyle({ "Represent this sentence for searching relevant passages: $it" }, { t, x -> "$t\n$x" })
-                "nomic" in id -> QueryStyle({ "search_query: $it" }, { t, x -> "search_document: $t\n$x" })
-                "e5" in id -> QueryStyle({ "query: $it" }, { t, x -> "passage: $t\n$x" })
+                "nomic" in id -> QueryStyle({ "search_query: $it" }, { t, x -> "search_document: $t\n$x" }, minCosine = 0.45f)
+                "e5" in id -> QueryStyle({ "query: $it" }, { t, x -> "passage: $t\n$x" }, minCosine = 0.75f)
                 else -> QueryStyle({ it }, { t, x -> "$t\n$x" })
             }
         }

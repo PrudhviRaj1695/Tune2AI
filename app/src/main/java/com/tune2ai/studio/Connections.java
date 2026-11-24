@@ -286,6 +286,42 @@ final class Connections {
         return out;
     }
 
+    /**
+     * Newest SMS that mention any of {@code terms} (in the sender's name or number, or the text), best match first:
+     * messages naming more of the terms come first, newest first among equals. Looks through the newest
+     * {@link #SMS_SCAN} messages, so "my HDFC OTP" finds the HDFC message even when it is not among the latest few.
+     */
+    List<String> smsMatching(int limit, List<String> terms) {
+        String[] cols = {Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.TYPE};
+        List<String> lines = new ArrayList<>();
+        List<Integer> scores = new ArrayList<>();
+        Map<String, String> names = new HashMap<>();
+        int scanned = 0;
+        try (Cursor c = context.getContentResolver().query(Telephony.Sms.CONTENT_URI, cols, null, null, Telephony.Sms.DATE + " DESC")) {
+            while (c != null && c.moveToNext() && scanned++ < SMS_SCAN && lines.size() < limit * 4) {
+                String address = nullToEmpty(c.getString(0));
+                String who = names.computeIfAbsent(address, this::contactName);
+                String body = nullToEmpty(c.getString(1)).replace('\n', ' ').trim();
+                String hay = (who + " " + address + " " + body).toLowerCase(Locale.ROOT);
+                int score = 0;
+                for (String t : terms) if (hay.contains(t)) score++;
+                if (score == 0) continue;
+                boolean sent = c.getInt(3) == Telephony.Sms.MESSAGE_TYPE_SENT;
+                lines.add("- " + fmt(WHEN, c.getLong(2)) + " · " + (sent ? "Me → " + who : who) + ": " + truncate(body, 160));
+                scores.add(score);
+            }
+        }
+        List<Integer> order = new ArrayList<>();
+        for (int i = 0; i < lines.size(); i++) order.add(i);
+        order.sort((x, y) -> Integer.compare(scores.get(y), scores.get(x))); // stable: newest first among equals
+        List<String> out = new ArrayList<>();
+        for (int i = 0; i < order.size() && out.size() < limit; i++) out.add(lines.get(order.get(i)));
+        return out;
+    }
+
+    /** How many of the newest SMS a question-time search reads. */
+    private static final int SMS_SCAN = 1500;
+
     List<String> recentCalls(int limit) {
         List<String> out = new ArrayList<>();
         for (Doc d : readCalls()) {

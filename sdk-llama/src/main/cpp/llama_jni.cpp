@@ -296,6 +296,8 @@ Java_com_tune2ai_sdk_llama_LlamaNative_load(JNIEnv * env, jclass, jstring path, 
         // Reading the prompt (prefill) is compute-bound and scales with cores; generating is
         // memory-bound and does best on the big cores alone. So prefill gets more threads.
         cparams.n_threads_batch = prefill_threads(n_threads);
+        // Flash attention where the backend supports it (llama.cpp decides per device): faster long prompts.
+        cparams.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_AUTO;
         return cparams;
     });
     if (!s) return 0;
@@ -391,10 +393,15 @@ Java_com_tune2ai_sdk_llama_LlamaNative_generate(JNIEnv * env, jclass, jlong hand
 
     llama_sampler * smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
     if (temperature <= 0.0f) {
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.1f, 0.0f, 0.0f));
         llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
     } else {
+        // Small models loop ("1. ... 1. ... 1. ...") until the token budget runs out, which is both a wrong answer
+        // and the slowest one. A mild penalty on the last 64 tokens stops that; min-p drops the unlikely tail.
+        llama_sampler_chain_add(smpl, llama_sampler_init_penalties(llama_vocab_n_tokens(vocab), 64, 1.1f, 0.0f, 0.0f));
         llama_sampler_chain_add(smpl, llama_sampler_init_top_k(40));
         llama_sampler_chain_add(smpl, llama_sampler_init_top_p(0.95f, 1));
+        llama_sampler_chain_add(smpl, llama_sampler_init_min_p(0.05f, 1));
         llama_sampler_chain_add(smpl, llama_sampler_init_temp(temperature));
         llama_sampler_chain_add(smpl, llama_sampler_init_dist((uint32_t) seed));
     }
